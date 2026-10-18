@@ -498,38 +498,54 @@ float simEdge(vec2 uv) {
       }`, { ...U, uProbe: { value: pts } });
     const heights = new Float32Array(COUNT);
     const buf = new Float32Array(COUNT * 4);
-    const pbo = gl.createBuffer();
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
-    gl.bufferData(gl.PIXEL_PACK_BUFFER, buf.byteLength, gl.STREAM_READ);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    let fence: WebGLSync | null = null, broken = false;
-    function poll(): void {
-      if (!fence) return;
-      if (gl.getSyncParameter(fence, gl.SYNC_STATUS) !== gl.SIGNALED) return;
-      gl.deleteSync(fence);
-      fence = null;
+    // A small ring of pixel-pack buffers read back once their fence signals, so the readback never stalls the GPU.
+    // Chrome may still log "READ-usage buffer was written, then fenced, but written again before being read back":
+    // a known false positive for this fence-then-read pattern (issuetracker.google.com/issues/558254911).
+    const ring = Array.from({ length: 3 }, () => {
+      const pbo = gl.createBuffer();
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
-      gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, buf);
-      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-      for (let i = 0; i < COUNT; i++) if (Number.isFinite(buf[i * 4])) heights[i] = buf[i * 4];
+      gl.bufferData(gl.PIXEL_PACK_BUFFER, buf.byteLength, gl.STREAM_READ);
+      return { pbo, fence: null as WebGLSync | null };
+    });
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    let next = 0, oldest = 0, broken = false;
+    function poll(): void {
+      // results arrive in the order they were requested; take every one that's ready, newest wins
+      for (let n = 0; n < ring.length; n++) {
+        const slot = ring[oldest];
+        if (!slot.fence) return;
+        const st = gl.clientWaitSync(slot.fence, 0, 0);
+        if (st !== gl.ALREADY_SIGNALED && st !== gl.CONDITION_SATISFIED) return;
+        gl.deleteSync(slot.fence);
+        slot.fence = null;
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, slot.pbo);
+        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, buf);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        for (let i = 0; i < COUNT; i++) if (Number.isFinite(buf[i * 4])) heights[i] = buf[i * 4];
+        oldest = (oldest + 1) % ring.length;
+      }
     }
     function kick(): void {
-      if (fence || broken) return;
+      const slot = ring[next];
+      if (slot.fence || broken) return;
       runPass(mat, rt);
       try {
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, slot.pbo);
         gl.readPixels(0, 0, COUNT, 1, gl.RGBA, gl.FLOAT, 0);
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-        fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        slot.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
         gl.flush();
+        next = (next + 1) % ring.length;
       } catch {
         broken = true;
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
       }
     }
     function release(): void {
-      if (fence) gl.deleteSync(fence);
-      gl.deleteBuffer(pbo);
+      for (const slot of ring) {
+        if (slot.fence) gl.deleteSync(slot.fence);
+        gl.deleteBuffer(slot.pbo);
+      }
     }
     return { pts, heights, poll, kick, release, count: COUNT };
   })();

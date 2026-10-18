@@ -10,7 +10,7 @@ an interactive wake, planar reflections, refraction with caustics, and foam.
 
 ## Run it
 
-Needs Node.js 20 or newer.
+Needs Node.js 22 or newer (CI builds with Node 24).
 
 ```bash
 npm install
@@ -39,6 +39,12 @@ source maps take care of the rest. Edits hot-reload in the open window.
 The debug browser uses its own profile in `.vscode/*-debug-profile/`, so it doesn't touch your normal browser. Port
 5173 must be free; if another dev server is running, stop it first. To check types without debugging, run the
 **typecheck** task (**Terminal → Run Task…**) or `npm run typecheck`.
+
+## Known console message
+
+Chrome may log `READ-usage buffer was written, then fenced, but written again before being read back` many times.
+It comes from the asynchronous GPU readback that floats the boats on the waves, and is a known Chrome false positive
+for that pattern ([issue 558254911](https://issuetracker.google.com/issues/558254911)). It does not affect the game.
 
 ## Deploy to GitHub Pages
 

@@ -651,11 +651,14 @@ export function mount({ root, exit }: GameContext): GameHandle {
     }
   }
 
-  const clock = new THREE.Clock();
+  // Timer (not the deprecated Clock): also pauses cleanly while the tab is hidden
+  const timer = new THREE.Timer();
+  timer.connect(document);
   let raf = 0, booted = false;
-  function frame(): void {
+  function frame(now?: number): void {
     raf = requestAnimationFrame(frame);
-    const raw = clock.getDelta();
+    timer.update(now);
+    const raw = timer.getDelta();
     const dt = clamp(raw, 1e-4, 0.05);
     update(dt);
     E.render({ dt, rawDt: raw, time, boatX: S.x, boatZ: S.z, heading: S.h, speed: S.speed, planeY, focusX: S.x, focusZ: S.z });
@@ -666,6 +669,7 @@ export function mount({ root, exit }: GameContext): GameHandle {
   return {
     dispose() {
       cancelAnimationFrame(raf);
+      timer.dispose();
       ac.abort();
       Sound.dispose();
       E.dispose();

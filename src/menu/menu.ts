@@ -40,7 +40,8 @@ function bestMontauk(): number {
   try { return Number(localStorage.getItem(BEST_KEY) || 0); } catch { return 0; }
 }
 
-const isIOS = (): boolean => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// iPadOS reports a Mac user agent, so a "Mac" with a touch screen is an iPad
+const isIOS = (): boolean => /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const isStandalone = (): boolean => matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
 /** Render the game selection page into `root`; returns a cleanup function. */
