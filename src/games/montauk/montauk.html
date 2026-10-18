@@ -54,23 +54,30 @@
   <div id="fight" hidden>
     <div class="fight-top">
       <span class="mood" id="mood">Fish on!</span>
-      <span class="fight-read"><span id="lineOut">0</span> m out</span>
+      <span class="fight-read"><span id="species">?</span> · <span id="lineOut">0</span> m of line out</span>
     </div>
-    <div class="tension" id="tension">
-      <div class="zone sweet" id="sweetZone"></div>
-      <div class="zone danger" id="dangerZone"></div>
-      <i id="tensionFill"></i>
-      <b id="dragMark"></b>
+    <div class="meter-head"><span class="label">Line tension</span><span class="meter-note good" id="tensionNote">Tiring the fish</span></div>
+    <div class="tension-wrap" id="tensionWrap">
+      <div class="tension">
+        <div class="zone sweet" id="sweetZone"></div>
+        <div class="zone danger" id="dangerZone"></div>
+        <i id="tensionFill"></i>
+      </div>
+      <b class="drag-mark" id="dragMark"><span>drag</span></b>
     </div>
-    <div class="row">
-      <span class="label">Fish</span><div class="bar stam"><i id="stamFill"></i></div><span id="species">?</span>
+    <div class="legend" aria-hidden="true">
+      <span><i class="sw sweet"></i>tiring the fish</span>
+      <span><i class="sw mark"></i>drag gives line here</span>
+      <span><i class="sw danger"></i>line can snap</span>
     </div>
+    <div class="row"><span class="label">Fish energy</span><div class="bar stam"><i id="stamFill"></i></div></div>
     <div class="row drag-row">
       <span class="label">Drag</span>
-      <button class="pill" data-k="dragDown" type="button" aria-label="Ease the drag">&minus;</button>
+      <button class="pill" data-k="dragDown" type="button" aria-label="Loosen the drag">&minus; Looser<kbd class="desk-only">Q</kbd></button>
       <span class="drag-val"><span id="dragLb">15</span> lb</span>
-      <button class="pill" data-k="dragUp" type="button" aria-label="Tighten the drag">+</button>
+      <button class="pill" data-k="dragUp" type="button" aria-label="Tighten the drag">Tighter +<kbd class="desk-only">E</kbd></button>
     </div>
+    <p class="drag-help" id="dragHelp">The drag sets how hard the reel holds before it lets line out. Tighter tires the fish faster, but too tight and a wave or a head shake snaps the line.</p>
   </div>
 </div>
 

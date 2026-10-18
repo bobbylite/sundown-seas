@@ -26,7 +26,7 @@ interface Lure { dist: number; lat: number; out: number; col: string; i: number;
 interface Fight {
   lure: Lure; rod: Rod; kind: SpeciesId; sp: Species; lb: number; kg: number; P0: number;
   pos: THREE.Vector3; vel: THREE.Vector3; stam: number; mood: Mood; moodT: number; next: Mood | null; circle: number;
-  L: number; payV: number; T: number; slackT: number; chafeT: number; gaffT: number; t: number; wig: number; gaffReady: boolean;
+  L: number; payV: number; T: number; Tshow: number; spike: number; lastStretch: number; slackT: number; chafeT: number; gaffT: number; t: number; wig: number; gaffReady: boolean;
 }
 interface Catch { name: string; lb: number; pts: number }
 
@@ -50,6 +50,8 @@ const PR = { center: 0, rail: 1, lure: 10, fish: 14, buoy: 15, ai: 16, school: 1
 const DECK_AREA = 9.4, WATERPLANE = 16;
 /** How much of the local chop climbs the topsides, versus being pushed aside by the hull. */
 const LOCAL_CHOP = 0.6;
+/** Tension (N) where the meter turns red: a jolt on top of this will part the line. */
+const SNAP_WARN = 175;
 const BIRD_MAX = 72;
 const LINE_PTS = 24;
 const LURE_DEF = [
@@ -737,7 +739,7 @@ export function mount({ root, exit }: GameContext): GameHandle {
     speed: $('#speed'), thr: $('#thr'), thrFill: $('#thrFill'), thrBar: $('#thrBar'), seaLabel: $('#seaLabel'), waveArrow: $<SVGGElement>('#waveArrow'),
     waterPanel: $('#waterPanel'), waterL: $('#waterL'), waterFill: $('#waterFill'), inRate: $('#inRate'), outRate: $('#outRate'),
     lineState: $('#lineState'), fight: $('#fight'), mood: $('#mood'), lineOut: $('#lineOut'), dragLb: $('#dragLb'), tensionFill: $('#tensionFill'),
-    dragMark: $('#dragMark'), sweet: $('#sweetZone'), danger: $('#dangerZone'), stamFill: $('#stamFill'), species: $('#species'),
+    dragMark: $('#dragMark'), sweet: $('#sweetZone'), danger: $('#dangerZone'), tensionNote: $('#tensionNote'), tensionWrap: $('#tensionWrap'), dragHelp: $('#dragHelp'), stamFill: $('#stamFill'), species: $('#species'),
     fishCount: $('#fishCount'), totalLb: $('#totalLb'), score: $('#score'),
   };
   {
@@ -869,7 +871,7 @@ export function mount({ root, exit }: GameContext): GameHandle {
       lure, rod, kind: school.sp, sp, lb, kg, P0: sp.power * 9 * Math.pow(kg, 0.8) * tier.fish,
       pos: new THREE.Vector3(lure.pos.x, -1, lure.pos.z), vel: new THREE.Vector3(ax / al * sp.speed * 0.8, 0, az / al * sp.speed * 0.8),
       stam: 1, mood: 'run', moodT: rand(3, 6), next: null, circle: Math.random() < 0.5 ? 1 : -1,
-      L: _v.distanceTo(lure.pos) + 3, payV: 0, T: 0, slackT: 0, chafeT: 0, gaffT: 0, t: 0, wig: rand(0, TAU), gaffReady: false,
+      L: _v.distanceTo(lure.pos) + 3, payV: 0, T: 0, Tshow: 0, spike: 0, lastStretch: 0, slackT: 0, chafeT: 0, gaffT: 0, t: 0, wig: rand(0, TAU), gaffReady: false,
     };
     lines.mode = 'out';
     for (const l of lures) if (l !== lure) { l.line.visible = false; l.lure.visible = false; }
@@ -954,17 +956,29 @@ export function mount({ root, exit }: GameContext): GameHandle {
     if (wasAir && f.pos.y <= 0.1) { Sim.splash(f.pos.x, f.pos.z, 1.6, -0.3); splashBurst(f.pos.x, 0.1, f.pos.z, 40, 1.4); }
     if (shoreSDF(f.pos.x, f.pos.z) < 3) { f.vel.x *= -0.5; f.vel.z *= -0.5; }
 
-    // the line: a stretchy tether with a slipping drag on the reel
+    // the line: line stretch and rod flex in series, with some damping, and a drag that slips at its setting
     const D2 = tip.distanceTo(f.pos);
-    const k = 3500 / Math.max(f.L, 8);
-    f.T = Math.max(0, (D2 - f.L) * k);
+    const kLine = 3500 / Math.max(f.L, 8), kRod = 260;
+    const k = 1 / (1 / kLine + 1 / kRod);
+    const stretch = D2 - f.L;
+    const stretchRate = f.t > dt ? (stretch - f.lastStretch) / dt : 0;
+    f.lastStretch = stretch;
+    const cDamp = 2 * 0.7 * Math.sqrt(k * f.kg * 2);
+    f.T = stretch > 0 ? Math.max(0, k * stretch + cDamp * stretchRate) : 0;
     const dragN = S.drag * 4.448;
-    if (f.T > dragN || f.payV > 0) {
-      f.payV += (f.T - dragN) / 18 * dt;
-      if (f.T < dragN) f.payV -= 2.5 * dt;
-      f.payV = Math.max(0, f.payV);
+    let slip = 0;
+    if (f.T > dragN) {
+      // the drag gives line until the pull is back down to its setting
+      slip = Math.max(0, stretch - dragN / k);
+      f.L += slip;
+      f.lastStretch -= slip;
+      f.T = dragN;
     }
-    f.L += f.payV * dt;
+    f.payV = damp(f.payV, slip / dt, 10, dt);
+    // jolts the drag can't absorb fast enough: a wave slam, a head shake
+    if (f.mood === 'thrash' && Math.random() < dt * 2) f.spike = Math.max(f.spike, rand(15, 40));
+    f.spike = Math.max(0, f.spike - dt * 140);
+    f.Tshow = damp(f.Tshow, f.T + f.spike, 12, dt);
     if (reel && f.payV < 0.05) {
       const rate = 1.25 * Math.sqrt(clamp(1 - f.T / dragN, 0, 1)) + (f.T < 5 ? 0.35 : 0);
       f.L = Math.max(3, f.L - rate * dt);
@@ -976,10 +990,10 @@ export function mount({ root, exit }: GameContext): GameHandle {
       clickAcc += dt * 9;
       while (clickAcc > 1) { clickAcc -= 1; Sound.burst(1800, 8, 0.025, 0.025); }
     }
-    f.stam = clamp(f.stam - dt * ((f.T / f.P0) * 0.055 / sp.endurance + 0.003) + (f.T < 0.2 * f.P0 ? dt * 0.012 : 0), 0, 1);
+    f.stam = clamp(f.stam - dt * ((f.T / f.P0) * 0.055 / sp.endurance + 0.003) + (f.T < 0.08 * f.P0 ? dt * 0.012 : 0), 0, 1);
 
     // what goes wrong
-    if (f.T > LINE_BREAK) return endFight(f, false, 'Line snapped!', 'Too much tension. Ease the drag or slow the boat.');
+    if (f.T + f.spike > LINE_BREAK) return endFight(f, false, 'Line snapped!', 'The drag was too tight to absorb that jolt. Ease it off.');
     if (f.L > SPOOL) return endFight(f, false, 'Spooled!', 'It took every metre of line. Chase it with the boat.');
     f.slackT = f.T < 3 ? f.slackT + dt : Math.max(0, f.slackT - dt * 2);
     if (f.slackT > 2.6 && Math.random() < dt * 1.5) return endFight(f, false, 'Hook pulled', 'The line went slack. Reel when it runs at you.');
@@ -1101,7 +1115,7 @@ export function mount({ root, exit }: GameContext): GameHandle {
       Sound.burst(900, 0.6, 0.25, 0.5, 0.4);
       _v.copy(RAIL[0].w0);
       for (let k = 0; k < 40; k++) emit(_v.x + rand(-1, 1), _v.y, _v.z + rand(-1, 1), sh * S.u * 0.4 + rand(-3, 3), rand(3, 7), ch * S.u * 0.4 + rand(-3, 3), rand(0.6, 1.2), rand(0.3, 0.6), 1, 0.97, 0.94);
-      if (fight) fight.T += 70;
+      if (fight) fight.spike = Math.max(fight.spike, 75);
     }
     // scuppers: an orifice draining the cockpit; flap valves stop the sea coming back in
     const level = S.water / DECK_AREA;
@@ -1445,11 +1459,21 @@ export function mount({ root, exit }: GameContext): GameHandle {
       el.mood.textContent = mood;
       el.mood.className = `mood ${mcls}`;
       el.lineOut.textContent = String(Math.round(f.L));
-      el.tensionFill.style.transform = `scaleX(${clamp(f.T / LINE_BREAK, 0, 1)})`;
-      el.dragMark.style.left = `${clamp(S.drag * 4.448 / LINE_BREAK, 0, 1) * 100}%`;
-      el.sweet.style.left = `${clamp(f.P0 * 0.35 / LINE_BREAK, 0, 1) * 100}%`;
-      el.sweet.style.width = `${clamp(f.P0 * 0.75 / LINE_BREAK, 0, 1) * 100}%`;
-      el.danger.style.width = `${(1 - 190 / LINE_BREAK) * 100}%`;
+      const dragN = S.drag * 4.448, pct = (n: number): string => `${clamp(n / LINE_BREAK, 0, 1) * 100}%`;
+      el.tensionFill.style.transform = `scaleX(${clamp(f.Tshow / LINE_BREAK, 0, 1)})`;
+      el.dragMark.style.left = pct(dragN);
+      el.sweet.style.left = pct(dragN * 0.35);
+      el.sweet.style.width = pct(dragN * 0.65);
+      el.danger.style.left = pct(SNAP_WARN);
+      let note = 'Tiring the fish', ncls = 'good';
+      if (f.Tshow > SNAP_WARN) { note = 'Near breaking! Ease the drag'; ncls = 'bad'; }
+      else if (f.payV > 0.3) { note = `Drag slipping · the fish is taking line`; ncls = 'warn'; }
+      else if (f.Tshow < 5) { note = 'Slack · reel in'; ncls = 'warn'; }
+      else if (f.Tshow < dragN * 0.35) { note = 'Light pressure · reel or tighten the drag'; ncls = ''; }
+      el.tensionNote.textContent = note;
+      el.tensionNote.className = `meter-note ${ncls}`;
+      el.tensionWrap.className = `tension-wrap ${ncls}`;
+      el.dragHelp.hidden = f.t > 9;
       el.stamFill.style.transform = `scaleX(${f.stam})`;
       el.species.textContent = f.pos.y > -3 || f.L < 20 ? f.sp.name : 'Something big…';
     } else {
@@ -1509,6 +1533,12 @@ export function mount({ root, exit }: GameContext): GameHandle {
 
   // ================================================================ loop
   reset();
+  // dev builds only: a handle for poking at the game from the console or a test script
+  if (import.meta.env.DEV) {
+    (window as unknown as Record<string, unknown>).__montauk = {
+      S, lures, lines, hookUp, get fight() { return fight; }, get schools() { return schools; },
+    };
+  }
   const clock = new THREE.Clock();
   let raf = 0, booted = false;
   function frame(): void {

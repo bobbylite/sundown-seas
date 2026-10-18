@@ -56,7 +56,7 @@
   width: min(460px, calc(100% - 32px));
   display: flex; flex-direction: column; gap: 6px;
 }
-.game.montauk .fishbox .pill { pointer-events: auto; min-width: 40px; padding: 2px 12px; font-size: 16px; line-height: 1.3; }
+.game.montauk .fishbox .pill { pointer-events: auto; padding: 3px 12px; font-size: 14px; line-height: 1.3; display: inline-flex; align-items: center; }
 .game.montauk .line-state { font-family: var(--font-display); font-weight: 700; font-size: 16px; text-align: center; }
 .game.montauk .line-state.good { color: var(--sea); }
 .game.montauk .line-state.warn { color: var(--warn); }
@@ -64,12 +64,32 @@
 .game.montauk .mood { font-family: var(--font-display); font-weight: 900; font-size: 20px; color: var(--gold); }
 .game.montauk .mood.warn { color: var(--warn); }
 .game.montauk .mood.bad { color: var(--danger); }
-.game.montauk .tension { position: relative; height: 16px; border-radius: 99px; background: rgba(255, 244, 228, 0.12); overflow: hidden; }
+.game.montauk .meter-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.game.montauk .meter-note { font-weight: 700; font-size: 13px; }
+.game.montauk .meter-note.good { color: var(--sea); }
+.game.montauk .meter-note.warn { color: var(--warn); }
+.game.montauk .meter-note.bad { color: var(--danger); }
+.game.montauk .tension-wrap { position: relative; margin: 2px 0 12px; }
+.game.montauk .tension { position: relative; height: 18px; border-radius: 99px; background: rgba(255, 244, 228, 0.12); overflow: hidden; }
 .game.montauk .tension .zone { position: absolute; top: 0; bottom: 0; }
-.game.montauk .tension .sweet { background: rgba(79, 214, 192, 0.32); }
-.game.montauk .tension .danger { background: rgba(255, 90, 79, 0.35); right: 0; }
-.game.montauk .tension > i { position: absolute; left: 0; top: 3px; bottom: 3px; width: 100%; border-radius: 99px; background: var(--cream); transform-origin: left; transform: scaleX(0); }
-.game.montauk .tension > b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--gold); }
+.game.montauk .tension .sweet { background: rgba(79, 214, 192, 0.35); }
+.game.montauk .tension .danger { background: rgba(255, 90, 79, 0.4); right: 0; }
+.game.montauk .tension > i { position: absolute; left: 0; top: 4px; bottom: 4px; width: 100%; border-radius: 99px; background: var(--cream); transform-origin: left; transform: scaleX(0); transition: background 0.2s; }
+.game.montauk .tension-wrap.warn .tension > i { background: var(--warn); }
+.game.montauk .tension-wrap.bad .tension > i { background: var(--danger); }
+.game.montauk .drag-mark { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--gold); transition: left 0.15s; }
+.game.montauk .drag-mark span {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 1px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); white-space: nowrap;
+}
+.game.montauk .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; opacity: 0.85; }
+.game.montauk .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.game.montauk .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.game.montauk .sw.sweet { background: rgba(79, 214, 192, 0.6); }
+.game.montauk .sw.danger { background: rgba(255, 90, 79, 0.7); }
+.game.montauk .sw.mark { width: 3px; height: 12px; background: var(--gold); }
+.game.montauk .drag-row kbd { margin: 0 0 0 6px; min-width: 18px; line-height: 16px; font-size: 11px; }
+.game.montauk .drag-help { margin: 0; font-size: 12px; line-height: 1.4; opacity: 0.85; text-align: center; text-wrap: pretty; }
 .game.montauk .row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
 .game.montauk .row .bar { flex: 1; margin: 0; }
 .game.montauk .stam > i { background: linear-gradient(90deg, var(--accent), var(--gold)); }
@@ -95,7 +115,7 @@
 @media (pointer: coarse) {
   /* the touch lever replaces the throttle bar; keep the fight panel clear of the thumbs */
   .game.montauk .gauge-read > div:last-child { display: none; }
-  .game.montauk .fishbox { bottom: calc(14px + var(--sab)); width: min(400px, calc(100% - 380px)); }
+  .game.montauk .fishbox { bottom: calc(14px + var(--sab)); width: min(440px, calc(100% - 410px)); }
 }
 @media (max-height: 500px) {
   .game.montauk .chart { display: none; }
@@ -110,7 +130,10 @@
   .game.montauk .line-state { font-size: 13px; }
   .game.montauk .mood { font-size: 15px; }
   .game.montauk .fishbox { gap: 4px; }
-  .game.montauk .tension { height: 12px; }
+  .game.montauk .tension { height: 14px; }
+  .game.montauk .drag-help, .game.montauk .legend { display: none; }
+  .game.montauk .fishbox { gap: 3px; }
+  .game.montauk .legend, .game.montauk .drag-help { font-size: 10px; }
   .game.montauk .tiers span { padding: 5px 3px; font-size: 11px; }
   .game.montauk .tiers span b { font-size: 13px; }
   .game.montauk .tier-blurb { min-height: 0; }
