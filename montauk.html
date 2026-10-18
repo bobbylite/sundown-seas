@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Montauk Rips</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700&family=Grandstander:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Layout: full-bleed sea; helm instruments pinned to the corners, fishing panel along the bottom */
+  --ink: #13213a;
+  --glass: rgba(19, 33, 58, 0.6);
+  --glass-strong: rgba(19, 33, 58, 0.8);
+  --cream: #fff4e4;
+  --coral: #ef5b3f;
+  --coral-deep: #a8361f;
+  --gold: #ffc35c;
+  --sea: #4fd6c0;
+  --warn: #ffb347;
+  --danger: #ff5a4f;
+  --line: rgba(255, 244, 228, 0.18);
+  --font-display: "Grandstander", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Baloo 2", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--ink);
+  color: var(--cream);
+  font-family: var(--font-body);
+  font-size: 15px;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+}
+#app { position: fixed; inset: 0; }
+#scene { display: block; width: 100%; height: 100%; }
+
+.hud { position: absolute; pointer-events: none; }
+.panel {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 8px 12px;
+}
+.label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.75; }
+.value { font-family: var(--font-display); font-weight: 700; font-size: 22px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.value small { font-size: 13px; opacity: 0.75; margin-left: 2px; }
+
+.top-left {
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  left: calc(16px + env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 8px;
+}
+.brand { font-family: var(--font-display); font-weight: 900; font-size: 24px; color: var(--gold); text-shadow: 0 2px 0 rgba(19, 33, 58, 0.55); }
+.catch { display: flex; gap: 16px; }
+.chart { padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.chart canvas { display: block; width: 170px; height: 120px; border-radius: 9px; }
+.chart .label { padding: 0 4px 2px; }
+
+.top-right {
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+}
+.gauge { display: flex; gap: 12px; align-items: center; }
+.gauge-read { display: flex; flex-direction: column; gap: 6px; text-align: right; min-width: 92px; }
+.dial { width: 104px; height: 104px; flex: none; }
+.d-ring { fill: rgba(19, 33, 58, 0.35); stroke: var(--line); stroke-width: 1.5; }
+.d-good { fill: var(--sea); fill-opacity: 0.35; }
+.d-ok { fill: var(--sea); fill-opacity: 0.14; }
+.d-wave { stroke: var(--cream); stroke-width: 3; stroke-linecap: round; fill: none; opacity: 0.9; }
+.d-wave-head { fill: var(--cream); }
+.d-boat { fill: var(--cream); stroke: var(--ink); stroke-width: 1; }
+.sea-label { font-family: var(--font-display); font-weight: 700; font-size: 15px; padding: 3px 10px; border-radius: 99px; background: var(--glass); border: 1px solid var(--line); }
+.sea-label.good { color: var(--sea); }
+.sea-label.warn { color: var(--warn); }
+.sea-label.bad { color: var(--danger); }
+
+.bar { margin-top: 5px; height: 8px; border-radius: 99px; background: rgba(255, 244, 228, 0.15); overflow: hidden; position: relative; }
+.bar > i { display: block; height: 100%; width: 100%; border-radius: inherit; transform-origin: left; transform: scaleX(0); }
+.thr > i { background: linear-gradient(90deg, var(--sea), var(--gold)); }
+.thr.astern > i { background: var(--warn); }
+
+.water { width: 236px; }
+.water .bar { height: 12px; }
+.water .bar > i { background: linear-gradient(90deg, #4fa8d6, var(--sea)); transition: background 0.3s; }
+.water.warn .bar > i { background: linear-gradient(90deg, var(--warn), #ff8f47); }
+.water.bad .bar > i { background: linear-gradient(90deg, var(--danger), #ff2f6d); }
+.water.bad { border-color: var(--danger); animation: pulse 0.7s ease-in-out infinite alternate; }
+@keyframes pulse { from { box-shadow: 0 0 0 0 rgba(255, 90, 79, 0); } to { box-shadow: 0 0 0 4px rgba(255, 90, 79, 0.45); } }
+.flow { display: flex; justify-content: space-between; gap: 10px; white-space: nowrap; margin-top: 4px; font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.9; }
+.flow .in.hot { color: var(--danger); font-weight: 700; }
+
+.fishbox {
+  left: 50%;
+  bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(460px, calc(100% - 32px));
+  display: flex; flex-direction: column; gap: 6px;
+}
+.line-state { font-family: var(--font-display); font-weight: 700; font-size: 16px; text-align: center; }
+.line-state.good { color: var(--sea); }
+.line-state.warn { color: var(--warn); }
+.fight-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-variant-numeric: tabular-nums; font-size: 13px; }
+.mood { font-family: var(--font-display); font-weight: 900; font-size: 20px; color: var(--gold); }
+.mood.warn { color: var(--warn); }
+.mood.bad { color: var(--danger); }
+.tension { position: relative; height: 16px; border-radius: 99px; background: rgba(255, 244, 228, 0.12); overflow: hidden; }
+.tension .zone { position: absolute; top: 0; bottom: 0; }
+.tension .sweet { background: rgba(79, 214, 192, 0.32); }
+.tension .danger { background: rgba(255, 90, 79, 0.35); right: 0; }
+.tension > i { position: absolute; left: 0; top: 3px; bottom: 3px; width: 100%; border-radius: 99px; background: var(--cream); transform-origin: left; transform: scaleX(0); }
+.tension > b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--gold); }
+.row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.row .bar { flex: 1; margin: 0; }
+.stam > i { background: linear-gradient(90deg, var(--coral), var(--gold)); }
+
+.hint {
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px;
+  font-size: 13px; width: max-content; max-width: calc(100% - 32px);
+}
+.hint span { white-space: nowrap; opacity: 0.88; }
+kbd {
+  display: inline-block; min-width: 22px; padding: 0 6px; margin-right: 3px; border-radius: 6px;
+  background: var(--cream); color: var(--ink); font-family: var(--font-body); font-weight: 700; font-size: 12px;
+  line-height: 20px; text-align: center; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.toast {
+  top: calc(20% + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translate(-50%, 0) scale(0.9);
+  font-family: var(--font-display); font-weight: 900; font-size: clamp(22px, 4vw, 36px);
+  color: var(--gold); text-shadow: 0 3px 0 rgba(19, 33, 58, 0.6);
+  opacity: 0; transition: opacity 0.25s, transform 0.35s cubic-bezier(.2, 1.6, .4, 1);
+  white-space: nowrap; text-align: center;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.toast.bad { color: var(--danger); }
+.toast small { display: block; font-size: 0.5em; color: var(--cream); font-weight: 700; }
+
+.overlay {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(ellipse at 50% 60%, rgba(19, 33, 58, 0.1), rgba(19, 33, 58, 0.6));
+  transition: opacity 0.6s;
+  overflow-y: auto;
+}
+.overlay.gone { opacity: 0; pointer-events: none; }
+.card {
+  width: min(500px, 100%);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 24px 22px 20px;
+  display: flex; flex-direction: column; gap: 12px; text-align: center;
+}
+.card h1, .card h2 {
+  margin: 0; font-family: var(--font-display); font-weight: 900; line-height: 0.95;
+  color: var(--gold); text-shadow: 0 4px 0 var(--coral-deep); text-wrap: balance;
+}
+.card h1 { font-size: clamp(40px, 9vw, 60px); }
+.card h2 { font-size: clamp(30px, 7vw, 42px); }
+.card p { margin: 0; line-height: 1.5; opacity: 0.92; text-wrap: pretty; }
+.tiers { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tiers legend { padding: 0; margin-bottom: 6px; width: 100%; }
+.tiers label { cursor: pointer; }
+.tiers input { position: absolute; opacity: 0; pointer-events: none; }
+.tiers span {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 4px; border-radius: 12px;
+  border: 1px solid var(--line); background: rgba(255, 244, 228, 0.05); font-size: 12px; line-height: 1.25;
+}
+.tiers span b { font-family: var(--font-display); font-size: 15px; }
+.tiers input:checked + span { border-color: var(--gold); background: rgba(255, 195, 92, 0.16); color: var(--gold); }
+.tiers input:focus-visible + span { outline: 3px solid var(--gold); outline-offset: 2px; }
+.tier-blurb { font-size: 13px; min-height: 2.6em; opacity: 0.85; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; text-align: left; font-size: 14px; margin: 2px auto 0; }
+.keys dt { white-space: nowrap; }
+.keys dd { margin: 0; opacity: 0.85; align-self: center; }
+.btn {
+  font-family: var(--font-display); font-weight: 900; font-size: 22px; color: var(--ink);
+  background: var(--coral); border: 0; border-radius: 16px; padding: 12px 30px;
+  box-shadow: 0 5px 0 var(--coral-deep); cursor: pointer; align-self: center;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.btn:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--coral-deep); }
+.btn:focus-visible, .sound:focus-visible, .tbtn:focus-visible, .alt:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.alt { color: var(--sea); font-size: 14px; text-underline-offset: 3px; border-radius: 4px; }
+.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; text-align: left; font-variant-numeric: tabular-nums; max-height: 30vh; overflow-y: auto; }
+.log li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 10px; border-radius: 8px; background: rgba(255, 244, 228, 0.06); }
+.stats { display: flex; justify-content: center; gap: 22px; }
+
+.sound {
+  position: absolute;
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  font-family: var(--font-body); font-weight: 700; font-size: 13px; color: var(--cream);
+  background: var(--glass); border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; cursor: pointer;
+}
+
+.touch { display: none; }
+@media (pointer: coarse) {
+  .hint { display: none; }
+  .fishbox { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  .touch {
+    position: absolute; left: 0; right: 0;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    padding: 0 calc(16px + env(safe-area-inset-right, 0px)) 0 calc(16px + env(safe-area-inset-left, 0px));
+    display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none;
+  }
+  .tgroup { display: flex; gap: 8px; pointer-events: auto; }
+  .tbtn {
+    width: 58px; height: 58px; border-radius: 50%; border: 1px solid var(--line); background: var(--glass);
+    color: var(--cream); font-family: var(--font-display); font-weight: 900; font-size: 15px; touch-action: none;
+  }
+  .tbtn.on { background: var(--coral); color: var(--ink); }
+  .sound { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 640px) {
+  .brand { font-size: 19px; }
+  .chart { display: none; }
+  .dial { width: 84px; height: 84px; }
+  .water { width: 180px; }
+  .value { font-size: 19px; }
+  .catch { gap: 10px; }
+  .tiers { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="scene"></canvas>
+
+  <div class="hud top-left">
+    <div class="brand">Montauk Rips</div>
+    <div class="panel catch">
+      <div><div class="label">Landed</div><div class="value" id="fishCount">0</div></div>
+      <div><div class="label">Weight</div><div class="value"><span id="totalLb">0</span><small>lb</small></div></div>
+      <div><div class="label">Score</div><div class="value" id="score">0</div></div>
+    </div>
+    <div class="panel chart">
+      <canvas id="chart" width="340" height="240" aria-label="Chart of Montauk Point with your boat and the birds you have spotted"></canvas>
+      <div class="label">Chart · birds = fish feeding</div>
+    </div>
+  </div>
+
+  <div class="hud top-right">
+    <div class="panel gauge">
+      <div class="gauge-read">
+        <div>
+          <div class="label">Speed</div>
+          <div class="value"><span id="speed">0.0</span><small>kn</small></div>
+        </div>
+        <div>
+          <div class="label">Throttle <span id="thr">0%</span></div>
+          <div class="bar thr" id="thrBar"><i id="thrFill"></i></div>
+        </div>
+      </div>
+      <svg class="dial" viewBox="-50 -50 100 100" aria-hidden="true">
+        <circle r="46" class="d-ring"/>
+        <path id="dialGood" class="d-good" d=""/>
+        <path id="dialOk" class="d-ok" d=""/>
+        <g id="waveArrow">
+          <path class="d-wave" d="M-14,-40 Q0,-34 14,-40"/>
+          <path class="d-wave" d="M-12,-31 Q0,-25 12,-31"/>
+          <path class="d-wave-head" d="M0,-12 L-6,-22 L6,-22Z"/>
+        </g>
+        <path class="d-boat" d="M0,-16 C7,-9 8,5 6,14 L-6,14 C-8,5 -7,-9 0,-16Z"/>
+      </svg>
+    </div>
+    <div class="sea-label good" id="seaLabel">Quartering · clean</div>
+    <div class="panel water" id="waterPanel">
+      <div class="label">Water on deck · <span id="waterL">0 L</span></div>
+      <div class="bar"><i id="waterFill"></i></div>
+      <div class="flow"><span class="in" id="inRate">in 0 L/s</span><span id="outRate">scuppers 0 L/s</span></div>
+    </div>
+  </div>
+
+  <div class="hud panel fishbox" id="fishbox">
+    <div class="line-state" id="lineState">Lines in · press L to set the spread</div>
+    <div id="fight" hidden>
+      <div class="fight-top">
+        <span class="mood" id="mood">Fish on!</span>
+        <span><span id="lineOut">0</span> m out · drag <span id="dragLb">18</span> lb</span>
+      </div>
+      <div class="tension" id="tension">
+        <div class="zone sweet" id="sweetZone"></div>
+        <div class="zone danger" id="dangerZone"></div>
+        <i id="tensionFill"></i>
+        <b id="dragMark"></b>
+      </div>
+      <div class="row"><span class="label">Fish</span><div class="bar stam"><i id="stamFill"></i></div><span id="species">?</span></div>
+    </div>
+  </div>
+
+  <div class="hud toast" id="toast"></div>
+
+  <div class="hud hint panel">
+    <span><kbd>W</kbd><kbd>S</kbd>throttle</span>
+    <span><kbd>A</kbd><kbd>D</kbd>steer</span>
+    <span><kbd>L</kbd>lines</span>
+    <span><kbd>Space</kbd>reel</span>
+    <span><kbd>Q</kbd><kbd>E</kbd>drag</span>
+    <span><kbd>X</kbd>neutral</span>
+  </div>
+
+  <div class="touch">
+    <div class="tgroup">
+      <button class="tbtn" data-k="left" aria-label="Steer to port">&#9664;</button>
+      <button class="tbtn" data-k="right" aria-label="Steer to starboard">&#9654;</button>
+    </div>
+    <div class="tgroup">
+      <button class="tbtn" data-k="lines" aria-label="Set or clear lines">L</button>
+      <button class="tbtn" data-k="down" aria-label="Throttle down">&#9660;</button>
+      <button class="tbtn" data-k="up" aria-label="Throttle up">&#9650;</button>
+      <button class="tbtn" data-k="reel" aria-label="Reel">Reel</button>
+    </div>
+  </div>
+
+  <button class="sound" id="sound" type="button">Sound: off</button>
+
+  <div class="overlay" id="intro">
+    <div class="card">
+      <h1>Montauk Rips</h1>
+      <p>Sundown off Montauk Point. The ebb is running into an easterly and the rips are standing up. Find the birds, troll the spread through them, and fight your fish without swamping the boat.</p>
+      <fieldset class="tiers" id="tiers">
+        <legend class="label">How fast do your scuppers drain?</legend>
+        <label><input type="radio" name="tier" value="0"><span><b>Deckhand</b>big freeing ports</span></label>
+        <label><input type="radio" name="tier" value="1" checked><span><b>Mate</b>stock scuppers</span></label>
+        <label><input type="radio" name="tier" value="2"><span><b>Captain</b>half-clogged</span></label>
+        <label><input type="radio" name="tier" value="3"><span><b>Legend</b>clogged, big sea</span></label>
+      </fieldset>
+      <p class="tier-blurb" id="tierBlurb"></p>
+      <dl class="keys">
+        <dt><kbd>W</kbd><kbd>S</kbd> <kbd>X</kbd></dt><dd>Throttle lever up and down, X for neutral</dd>
+        <dt><kbd>A</kbd><kbd>D</kbd></dt><dd>Steer. Take the seas about 45° off the bow</dd>
+        <dt><kbd>L</kbd></dt><dd>Set or clear the spread: two outriggers, two flat lines</dd>
+        <dt><kbd>Space</kbd></dt><dd>Reel (hold). Throttle back the moment a fish is on</dd>
+        <dt><kbd>Q</kbd><kbd>E</kbd></dt><dd>Ease or tighten the drag</dd>
+      </dl>
+      <p class="label">Troll 5–8 knots · water over the rail drains slowly · too much at once and she goes down</p>
+      <button class="btn" id="go" type="button">Head out</button>
+      <a class="alt" href="index.html">Back to Sunset Skipper</a>
+    </div>
+  </div>
+
+  <div class="overlay gone" id="endCard">
+    <div class="card">
+      <h2 id="endTitle">Swamped off the Point</h2>
+      <p id="endText"></p>
+      <div class="stats">
+        <div><div class="label">Landed</div><div class="value" id="endCount">0</div></div>
+        <div><div class="label">Weight</div><div class="value"><span id="endLb">0</span><small>lb</small></div></div>
+        <div><div class="label">Score</div><div class="value" id="endScore">0</div></div>
+      </div>
+      <ul class="log" id="endLog"></ul>
+      <button class="btn" id="again" type="button">Go again</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module" src="js/montauk.js"></script>
+</body>
+</html>
