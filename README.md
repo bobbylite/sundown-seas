@@ -8,6 +8,16 @@ Two little toon boats on one real-time ocean, built with three.js and TypeScript
 A selection page picks the game; each game loads on demand. The ocean is a GPU FFT simulation (three cascades) with
 an interactive wake, planar reflections, refraction with caustics, and foam.
 
+## Screenshots
+
+### Sunset Skipper
+
+![Sunset Skipper gameplay](screenshots/sunset-skipper.png)
+
+### Montauk Rips
+
+![Montauk Rips gameplay](screenshots/montauk-rips.png)
+
 ## Run it
 
 Needs Node.js 22 or newer (CI builds with Node 24).
