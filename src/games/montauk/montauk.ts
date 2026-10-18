@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createEngine } from '../../engine/engine';
 import { TAU, clamp, lerp, damp, wrap, dampAngle, smooth, rand, reduceMotion } from '../../engine/math';
 import { SoundBed, bindSoundButton } from '../../engine/audio';
-import { createInput, createLever, blockPageZoom, createToast } from '../../ui/controls';
+import { createInput, createLever, blockPageZoom, createToast, createSwipeSteer, watchPhone } from '../../ui/controls';
 import type { GameContext, GameHandle } from '../types';
 import { LIGHTHOUSE, START, BUOY, RIPS, COAST, SEA_GLSL, shoreSDF, ripField, tide, terrainH, noise2, fbm2, northZ, southZ } from './geography';
 import { TIERS, SPECIES, MOODS, LINE_BREAK, SPOOL, BEST_KEY, type Tier, type Species, type SpeciesId, type Mood } from './rules';
@@ -771,6 +771,7 @@ export function mount({ root, exit }: GameContext): GameHandle {
   }
 
   // ================================================================ input
+  const swipe = createSwipeSteer(root, signal);
   const input = createInput(root, signal, id => {
     if (!started) { if (id === 'Enter') start(); return; }
     if (id === 'Escape') { exit(); return; }
@@ -778,6 +779,9 @@ export function mount({ root, exit }: GameContext): GameHandle {
     if (id === 'KeyL' || id === 'lines') toggleLines();
     if (id === 'KeyX') { S.throttle = 0; toast.show('Neutral'); }
   });
+  // phones: the water gauge joins the left column and the fishing strip runs along the bottom edge
+  const tlCol = $('.tl'), trCol = $('.tr'), waterPanelEl = $('#waterPanel'), fishboxEl = $('#fishbox');
+  watchPhone(root, signal, phone => { (phone ? tlCol : trCol).append(waterPanelEl); });
   const thrLever = createLever($('#thrLever'), {
     min: -0.5, max: 1, detent: 0,
     format: v => (Math.abs(v) < 0.005 ? 'N' : v < 0 ? `R${Math.round(-v * 100)}` : `${Math.round(v * 100)}`),
@@ -1019,7 +1023,7 @@ export function mount({ root, exit }: GameContext): GameHandle {
     // ---- helm
     let steer = 0, thrIn = 0, reel = false;
     if (started && !ended && !S.sinking) {
-      steer = (input.held('KeyA', 'ArrowLeft', 'left') ? 1 : 0) - (input.held('KeyD', 'ArrowRight', 'right') ? 1 : 0);
+      steer = clamp((input.held('KeyA', 'ArrowLeft', 'left') ? 1 : 0) - (input.held('KeyD', 'ArrowRight', 'right') ? 1 : 0) + swipe.value, -1, 1);
       thrIn = (input.held('KeyW', 'ArrowUp') ? 1 : 0) - (input.held('KeyS', 'ArrowDown') ? 1 : 0);
       reel = input.held('Space', 'KeyR', 'reel');
       if (input.held('KeyQ', 'dragDown')) S.drag = clamp(S.drag - dt * 8, 4, 40);
@@ -1440,6 +1444,7 @@ export function mount({ root, exit }: GameContext): GameHandle {
     el.inRate.textContent = `in ${Math.round(S.inRate * 1000).toLocaleString()} L/s`;
     el.inRate.classList.toggle('hot', S.inRate > S.outRate + 0.01);
     el.outRate.textContent = `scuppers ${Math.round(S.outRate * 1000).toLocaleString()} L/s`;
+    if (root.classList.contains('phone')) root.style.setProperty('--strip', `${fishboxEl.offsetHeight}px`);
     el.fishCount.textContent = String(landed.length);
     el.totalLb.textContent = String(S.lb);
     el.score.textContent = String(S.score);

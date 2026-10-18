@@ -153,3 +153,44 @@
 @media (pointer: coarse) and (max-width: 560px) {
   .game.montauk .fishbox { width: calc(100% - 24px); bottom: calc(196px + var(--sab)); }
 }
+
+/* ------------------------------------------------------------------ phones: info strip along the bottom, controls above it */
+.game.montauk.phone .fishbox {
+  left: calc(10px + var(--sal)); right: calc(10px + var(--sar)); bottom: calc(6px + var(--sab));
+  width: auto; transform: none; padding: 5px 10px; gap: 3px; border-radius: 12px;
+}
+.game.montauk.phone .touch { bottom: calc(14px + var(--sab) + var(--strip, 34px)); }
+.game.montauk.phone .line-state { font-size: 13px; }
+.game.montauk.phone .water { width: 180px; }
+.game.montauk.phone .water .flow { flex-direction: row; font-size: 10.5px; }
+.game.montauk.phone #fight:not([hidden]) {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; align-items: center;
+}
+.game.montauk.phone .fight-top { grid-column: 1 / -1; grid-row: 1; }
+.game.montauk.phone .mood { font-size: 15px; }
+.game.montauk.phone .fight-read { font-size: 12px; }
+.game.montauk.phone .tension-wrap { grid-column: 1; grid-row: 2; margin: 0 0 11px; }
+.game.montauk.phone .tension { height: 12px; }
+.game.montauk.phone .drag-row { grid-column: 2; grid-row: 2; gap: 6px; }
+.game.montauk.phone .row:not(.drag-row) { grid-column: 1; grid-row: 3; }
+.game.montauk.phone .meter-head { grid-column: 2; grid-row: 3; justify-content: flex-end; }
+.game.montauk.phone .meter-head .label, .game.montauk.phone .legend, .game.montauk.phone .drag-help { display: none; }
+.game.montauk.phone .meter-note { font-size: 11px; }
+.game.montauk.phone .fishbox .pill { padding: 3px 10px; font-size: 13px; }
+@media (orientation: landscape) {
+  .game.montauk.phone .lever-track { height: 108px; }
+  .game.montauk.phone .tbtn.lg { width: 64px; height: 64px; }
+  .game.montauk.phone .tbtn.sm { width: 44px; height: 44px; }
+}
+@media (orientation: portrait) {
+  /* tall screens: stack the fight panel so the tension meter gets the full width */
+  .game.montauk.phone #fight:not([hidden]) { grid-template-columns: minmax(0, 1fr); row-gap: 4px; }
+  .game.montauk.phone .tension-wrap { grid-column: 1; grid-row: 2; }
+  .game.montauk.phone .meter-head { grid-column: 1; grid-row: 3; justify-content: flex-start; }
+  .game.montauk.phone .row:not(.drag-row) { grid-column: 1; grid-row: 4; }
+  .game.montauk.phone .drag-row { grid-column: 1; grid-row: 5; justify-content: center; }
+}
+@media (orientation: landscape) and (max-height: 340px) {
+  .game.montauk.phone .lever-track { height: 84px; }
+  .game.montauk.phone .lever-label, .game.montauk.phone #seaLabel { display: none; }
+}

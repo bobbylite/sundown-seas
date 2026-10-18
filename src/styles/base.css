@@ -227,3 +227,15 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .toast, .overlay, .btn { transition: none; }
 }
+
+/* ------------------------------------------------------------------ phones (set by watchPhone): swipe to steer */
+.game.phone .touch .steer { display: none; }
+.game.phone .touch { justify-content: flex-end; }
+.swipe-ind {
+  position: absolute; width: 156px; height: 44px; margin: -22px 0 0 -78px; border-radius: 22px;
+  border: 1px solid var(--line); background: rgba(0, 0, 0, 0.22); pointer-events: none;
+  display: grid; place-items: center; z-index: 2;
+}
+.swipe-ind i { width: 34px; height: 34px; border-radius: 50%; background: var(--cream); opacity: 0.9; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
+.game.phone .brand { font-size: 15px; }
+.game.phone .tl, .game.phone .tr { gap: 6px; }

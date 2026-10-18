@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { createEngine } from '../../engine/engine';
 import { TAU, clamp, lerp, damp, wrap, dampAngle, smooth, rand, reduceMotion } from '../../engine/math';
 import { SoundBed, bindSoundButton } from '../../engine/audio';
-import { createInput, createLever, blockPageZoom, createToast } from '../../ui/controls';
+import { createInput, createLever, blockPageZoom, createToast, createSwipeSteer, watchPhone } from '../../ui/controls';
 import type { GameContext, GameHandle } from '../types';
 import hudHtml from './sunset.html?raw';
 import './sunset.css';
@@ -437,12 +437,14 @@ export function mount({ root, exit }: GameContext): GameHandle {
   stars.forEach((s, i) => placeStar(s, i === 0));
 
   // ---------------------------------------------------------------- input
+  const swipe = createSwipeSteer(root, signal);
   const input = createInput(root, signal, id => {
     if (!started) { if (id === 'Enter') start(); return; }
     if (id === 'Space' || id === 'hop') hop();
     if (id === 'KeyE' || id === 'wind') callWind();
     if (id === 'Escape') exit();
   });
+  watchPhone(root, signal);
   const sailLever = createLever($('#sailLever'), { min: 0, max: 1, format: v => `${Math.round(v * 100)}` }, signal, v => { S.sail = v; });
   canvas.addEventListener('wheel', e => { camDist = clamp(camDist + e.deltaY * 0.01, 9, 32); }, { passive: true, signal });
   $('#menuBtn').addEventListener('click', () => exit(), { signal });
@@ -491,7 +493,7 @@ export function mount({ root, exit }: GameContext): GameHandle {
 
     let steer = 0, sailIn = 0;
     if (started) {
-      steer = (input.held('KeyA', 'ArrowLeft', 'left') ? 1 : 0) - (input.held('KeyD', 'ArrowRight', 'right') ? 1 : 0);
+      steer = clamp((input.held('KeyA', 'ArrowLeft', 'left') ? 1 : 0) - (input.held('KeyD', 'ArrowRight', 'right') ? 1 : 0) + swipe.value, -1, 1);
       sailIn = (input.held('KeyW', 'ArrowUp') ? 1 : 0) - (input.held('KeyS', 'ArrowDown') ? 1 : 0);
     }
     S.rudder = damp(S.rudder, steer, 5, dt);

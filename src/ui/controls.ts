@@ -141,3 +141,68 @@ export function createToast(el: HTMLElement): { show(msg: string, sub?: string, 
     },
   };
 }
+
+export interface SwipeSteer {
+  /** -1 (hard to starboard) … 1 (hard to port); 0 when no finger is down. */
+  readonly value: number;
+  readonly active: boolean;
+}
+
+/**
+ * Swipe-to-steer: put a finger anywhere on the water and slide it left or right. The further the slide (up to
+ * `range` px) the harder the rudder; lifting the finger centres it. Buttons, levers and cards are left alone.
+ */
+export function createSwipeSteer(root: HTMLElement, signal: AbortSignal, range = 70): SwipeSteer {
+  const ind = document.createElement('div');
+  ind.className = 'swipe-ind';
+  ind.hidden = true;
+  ind.setAttribute('aria-hidden', 'true');
+  const knob = document.createElement('i');
+  ind.append(knob);
+  root.append(ind);
+  let id: number | null = null, x0 = 0, value = 0;
+  const ignore = (t: EventTarget | null): boolean =>
+    t instanceof Element && !!t.closest('button, a, input, label, .lever, .overlay:not(.gone)');
+  root.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' || id !== null || ignore(e.target)) return;
+    id = e.pointerId;
+    x0 = e.clientX;
+    value = 0;
+    ind.style.left = `${x0}px`;
+    ind.style.top = `${e.clientY}px`;
+    knob.style.transform = 'translateX(0)';
+    ind.hidden = false;
+  }, { signal });
+  root.addEventListener('pointermove', e => {
+    if (e.pointerId !== id) return;
+    let dx = e.clientX - x0;
+    // past full lock the centre slides along with the finger, so reversing takes effect at once
+    if (dx > range) { x0 = e.clientX - range; dx = range; } else if (dx < -range) { x0 = e.clientX + range; dx = -range; }
+    value = -dx / range;
+    ind.style.left = `${x0}px`;
+    knob.style.transform = `translateX(${dx}px)`;
+  }, { signal });
+  const end = (e: PointerEvent): void => {
+    if (e.pointerId !== id) return;
+    id = null;
+    value = 0;
+    ind.hidden = true;
+  };
+  root.addEventListener('pointerup', end, { signal });
+  root.addEventListener('pointercancel', end, { signal });
+  return { get value() { return value; }, get active() { return id !== null; } };
+}
+
+/** Phones (not tablets): a touch screen whose short side is at most 500 px. Adds `.phone` to `root`. */
+export function watchPhone(root: HTMLElement, signal: AbortSignal, onChange?: (phone: boolean) => void): void {
+  let last: boolean | null = null;
+  const check = (): void => {
+    const phone = matchMedia('(pointer: coarse)').matches && Math.min(innerWidth, innerHeight) <= 500;
+    if (phone === last) return;
+    last = phone;
+    root.classList.toggle('phone', phone);
+    onChange?.(phone);
+  };
+  addEventListener('resize', check, { signal });
+  check();
+}
