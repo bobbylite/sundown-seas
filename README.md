@@ -22,6 +22,24 @@ npm run build      # type-checks, then builds to dist/
 npm run preview    # serves dist/ at http://localhost:4173
 ```
 
+## Debug in VS Code
+
+The repo includes `.vscode/launch.json` and `.vscode/tasks.json`, so debugging is one key press.
+
+1. Run `npm install` once.
+2. Open the folder in VS Code and go to **Run and Debug** (`⇧⌘D` on macOS, `Ctrl+Shift+D` elsewhere).
+3. Pick a configuration and press **F5**:
+   - **Debug game (Chrome)** or **Debug game (Edge)** opens the game selection page.
+   - **Debug Sunset Skipper (Chrome)** and **Debug Montauk Rips (Chrome)** jump straight into a game.
+
+F5 starts the Vite dev server (`npm run dev` on port 5173), opens a separate browser window with the debugger
+attached, and stops the server when you end the session. Set breakpoints directly in the `.ts` files under `src/`;
+source maps take care of the rest. Edits hot-reload in the open window.
+
+The debug browser uses its own profile in `.vscode/*-debug-profile/`, so it doesn't touch your normal browser. Port
+5173 must be free; if another dev server is running, stop it first. To check types without debugging, run the
+**typecheck** task (**Terminal → Run Task…**) or `npm run typecheck`.
+
 ## Deploy to GitHub Pages
 
 The build uses a relative base path and hash routing (`#sunset`, `#montauk`), so it works at

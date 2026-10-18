@@ -1,0 +1,47 @@
+{
+  // F5 starts the Vite dev server, opens the game in a browser with the debugger attached,
+  // and stops the server when you end the session. Breakpoints in src/**/*.ts work via source maps.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug game (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173/",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "vite: dev server",
+      "postDebugTask": "vite: stop dev server",
+      "userDataDir": "${workspaceFolder}/.vscode/chrome-debug-profile"
+    },
+    {
+      "name": "Debug game (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:5173/",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "vite: dev server",
+      "postDebugTask": "vite: stop dev server",
+      "userDataDir": "${workspaceFolder}/.vscode/edge-debug-profile"
+    },
+    {
+      "name": "Debug Sunset Skipper (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173/#sunset",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "vite: dev server",
+      "postDebugTask": "vite: stop dev server",
+      "userDataDir": "${workspaceFolder}/.vscode/chrome-debug-profile"
+    },
+    {
+      "name": "Debug Montauk Rips (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173/#montauk",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "vite: dev server",
+      "postDebugTask": "vite: stop dev server",
+      "userDataDir": "${workspaceFolder}/.vscode/chrome-debug-profile"
+    }
+  ]
+}

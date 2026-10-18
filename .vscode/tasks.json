@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Runs in the background; the debugger launches once Vite prints its local URL.
+      "label": "vite: dev server",
+      "type": "npm",
+      "script": "dev",
+      "args": ["--strictPort"],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^__never_matches__$" },
+        "background": {
+          "activesBegins": true,
+          "beginsPattern": "VITE v",
+          "endsPattern": "Local:\\s+http"
+        }
+      },
+      "presentation": { "reveal": "silent", "panel": "dedicated" }
+    },
+    {
+      "label": "vite: stop dev server",
+      "type": "shell",
+      "command": "echo ${input:terminateDevServer}",
+      "presentation": { "reveal": "never" },
+      "problemMatcher": []
+    },
+    {
+      "label": "typecheck",
+      "type": "npm",
+      "script": "typecheck",
+      "problemMatcher": "$tsc",
+      "group": "build"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "terminateDevServer",
+      "type": "command",
+      "command": "workbench.action.tasks.terminate",
+      "args": "vite: dev server"
+    }
+  ]
+}
