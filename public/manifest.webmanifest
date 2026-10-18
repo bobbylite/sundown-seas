@@ -1,0 +1,17 @@
+{
+  "name": "Sundown Seas",
+  "short_name": "Sundown Seas",
+  "description": "Two little toon boats on a big ocean: Sunset Skipper and Montauk Rips.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#1d1633",
+  "theme_color": "#1d1633",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

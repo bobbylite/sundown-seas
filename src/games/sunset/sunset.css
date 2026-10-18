@@ -1,0 +1,34 @@
+.game.sunset {
+  /* Layout: full-bleed sea; small instrument panels pinned to the corners like a skipper's gauges */
+  --ink: #1d1633;
+  --glass: rgba(29, 22, 51, 0.58);
+  --glass-strong: rgba(29, 22, 51, 0.8);
+  --cream: #fff3df;
+  --accent: #ff7559;
+  --accent-deep: #b8432d;
+  --gold: #ffca63;
+  --sea: #5fd6c8;
+  --line: rgba(255, 243, 223, 0.18);
+}
+.game.sunset .stars-row { display: flex; align-items: center; gap: 10px; }
+.game.sunset .star-ico { width: 22px; height: 22px; fill: var(--gold); flex: none; }
+.game.sunset .gauge { display: flex; gap: 12px; align-items: center; }
+.game.sunset .gauge-read { display: flex; flex-direction: column; gap: 6px; text-align: right; }
+.game.sunset .pos { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--sea); white-space: nowrap; }
+.game.sunset .compass { width: 104px; height: 104px; flex: none; }
+.game.sunset .c-ring { fill: rgba(29, 22, 51, 0.35); stroke: var(--line); stroke-width: 1.5; }
+.game.sunset .c-tick { stroke: var(--cream); stroke-opacity: 0.35; stroke-width: 1.5; }
+.game.sunset .c-wind { fill: var(--sea); fill-opacity: 0.9; }
+.game.sunset .c-boat { fill: var(--cream); stroke: var(--ink); stroke-width: 1; }
+.game.sunset .c-star { fill: var(--gold); stroke: var(--ink); stroke-width: 1; }
+.game.sunset .c-nogo { fill: none; stroke: var(--accent); stroke-opacity: 0.55; stroke-width: 4; }
+.game.sunset .sailbar { width: 168px; }
+.game.sunset .bar { margin-top: 5px; height: 8px; border-radius: 99px; background: rgba(255, 243, 223, 0.15); overflow: hidden; }
+.game.sunset .bar > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--accent), var(--gold)); border-radius: inherit; transform-origin: left; }
+
+@media (max-height: 500px), (max-width: 560px) {
+  .game.sunset .compass { width: 76px; height: 76px; }
+  .game.sunset .pos { font-size: 13px; }
+  .game.sunset .gauge { gap: 8px; }
+  .game.sunset .star-ico { width: 18px; height: 18px; }
+}

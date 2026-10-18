@@ -1,0 +1,26 @@
+{
+  "name": "sundown-seas",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Two little toon boats on a GPU FFT ocean: Sunset Skipper and Montauk Rips.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@fontsource/baloo-2": "^5.3.0",
+    "@fontsource/grandstander": "^5.3.0",
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.160.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
+}

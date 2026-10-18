@@ -1,0 +1,132 @@
+.game.montauk {
+  /* Layout: full-bleed sea; helm instruments pinned to the corners, fishing panel along the bottom */
+  --ink: #13213a;
+  --glass: rgba(19, 33, 58, 0.6);
+  --glass-strong: rgba(19, 33, 58, 0.82);
+  --cream: #fff4e4;
+  --accent: #ef5b3f;
+  --accent-deep: #a8361f;
+  --gold: #ffc35c;
+  --sea: #4fd6c0;
+  --warn: #ffb347;
+  --danger: #ff5a4f;
+  --line: rgba(255, 244, 228, 0.18);
+}
+.game.montauk .catch { display: flex; gap: 16px; }
+.game.montauk .chart { padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.game.montauk .chart canvas { display: block; width: 170px; height: 120px; border-radius: 9px; }
+.game.montauk .chart .label { padding: 0 4px 2px; }
+
+.game.montauk .gauge { display: flex; gap: 12px; align-items: center; }
+.game.montauk .gauge-read { display: flex; flex-direction: column; gap: 6px; text-align: right; min-width: 92px; }
+.game.montauk .dial { width: 104px; height: 104px; flex: none; }
+.game.montauk .d-ring { fill: rgba(19, 33, 58, 0.35); stroke: var(--line); stroke-width: 1.5; }
+.game.montauk .d-good { fill: var(--sea); fill-opacity: 0.35; }
+.game.montauk .d-ok { fill: var(--sea); fill-opacity: 0.14; }
+.game.montauk .d-wave { stroke: var(--cream); stroke-width: 3; stroke-linecap: round; fill: none; opacity: 0.9; }
+.game.montauk .d-wave-head { fill: var(--cream); }
+.game.montauk .d-boat { fill: var(--cream); stroke: var(--ink); stroke-width: 1; }
+.game.montauk .sea-label {
+  font-family: var(--font-display); font-weight: 700; font-size: 15px; padding: 3px 10px; border-radius: 99px;
+  background: var(--glass); border: 1px solid var(--line); max-width: 260px; text-align: right;
+}
+.game.montauk .sea-label.good { color: var(--sea); }
+.game.montauk .sea-label.warn { color: var(--warn); }
+.game.montauk .sea-label.bad { color: var(--danger); }
+
+.game.montauk .bar { margin-top: 5px; height: 8px; border-radius: 99px; background: rgba(255, 244, 228, 0.15); overflow: hidden; position: relative; }
+.game.montauk .bar > i { display: block; height: 100%; width: 100%; border-radius: inherit; transform-origin: left; transform: scaleX(0); }
+.game.montauk .thr > i { background: linear-gradient(90deg, var(--sea), var(--gold)); }
+.game.montauk .thr.astern > i { background: var(--warn); }
+
+.game.montauk .water { width: 236px; }
+.game.montauk .water .bar { height: 12px; }
+.game.montauk .water .bar > i { background: linear-gradient(90deg, #4fa8d6, var(--sea)); transition: background 0.3s; }
+.game.montauk .water.warn .bar > i { background: linear-gradient(90deg, var(--warn), #ff8f47); }
+.game.montauk .water.bad .bar > i { background: linear-gradient(90deg, var(--danger), #ff2f6d); }
+.game.montauk .water.bad { border-color: var(--danger); animation: mk-pulse 0.7s ease-in-out infinite alternate; }
+@keyframes mk-pulse { from { box-shadow: 0 0 0 0 rgba(255, 90, 79, 0); } to { box-shadow: 0 0 0 4px rgba(255, 90, 79, 0.45); } }
+.game.montauk .flow { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.9; white-space: nowrap; }
+.game.montauk .flow .in.hot { color: var(--danger); font-weight: 700; }
+
+.game.montauk .fishbox {
+  left: 50%;
+  bottom: calc(58px + var(--sab));
+  transform: translateX(-50%);
+  width: min(460px, calc(100% - 32px));
+  display: flex; flex-direction: column; gap: 6px;
+}
+.game.montauk .fishbox .pill { pointer-events: auto; min-width: 40px; padding: 2px 12px; font-size: 16px; line-height: 1.3; }
+.game.montauk .line-state { font-family: var(--font-display); font-weight: 700; font-size: 16px; text-align: center; }
+.game.montauk .line-state.good { color: var(--sea); }
+.game.montauk .line-state.warn { color: var(--warn); }
+.game.montauk .fight-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-variant-numeric: tabular-nums; font-size: 13px; }
+.game.montauk .mood { font-family: var(--font-display); font-weight: 900; font-size: 20px; color: var(--gold); }
+.game.montauk .mood.warn { color: var(--warn); }
+.game.montauk .mood.bad { color: var(--danger); }
+.game.montauk .tension { position: relative; height: 16px; border-radius: 99px; background: rgba(255, 244, 228, 0.12); overflow: hidden; }
+.game.montauk .tension .zone { position: absolute; top: 0; bottom: 0; }
+.game.montauk .tension .sweet { background: rgba(79, 214, 192, 0.32); }
+.game.montauk .tension .danger { background: rgba(255, 90, 79, 0.35); right: 0; }
+.game.montauk .tension > i { position: absolute; left: 0; top: 3px; bottom: 3px; width: 100%; border-radius: 99px; background: var(--cream); transform-origin: left; transform: scaleX(0); }
+.game.montauk .tension > b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--gold); }
+.game.montauk .row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.game.montauk .row .bar { flex: 1; margin: 0; }
+.game.montauk .stam > i { background: linear-gradient(90deg, var(--accent), var(--gold)); }
+.game.montauk .drag-row { justify-content: center; }
+.game.montauk .drag-val { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; font-size: 14px; }
+
+.game.montauk .tiers { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.game.montauk .tiers legend { padding: 0; margin-bottom: 6px; width: 100%; }
+.game.montauk .tiers label { cursor: pointer; }
+.game.montauk .tiers input { position: absolute; opacity: 0; pointer-events: none; }
+.game.montauk .tiers span {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 4px; border-radius: 12px;
+  border: 1px solid var(--line); background: rgba(255, 244, 228, 0.05); font-size: 12px; line-height: 1.25;
+}
+.game.montauk .tiers span b { font-family: var(--font-display); font-size: 15px; }
+.game.montauk .tiers input:checked + span { border-color: var(--gold); background: rgba(255, 195, 92, 0.16); color: var(--gold); }
+.game.montauk .tiers input:focus-visible + span { outline: 3px solid var(--gold); outline-offset: 2px; }
+.game.montauk .tier-blurb { font-size: 13px; min-height: 2.6em; opacity: 0.85; }
+.game.montauk .log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; text-align: left; font-variant-numeric: tabular-nums; max-height: 30vh; overflow-y: auto; }
+.game.montauk .log li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 10px; border-radius: 8px; background: rgba(255, 244, 228, 0.06); }
+.game.montauk .stats { display: flex; justify-content: center; gap: 22px; }
+
+@media (pointer: coarse) {
+  /* the touch lever replaces the throttle bar; keep the fight panel clear of the thumbs */
+  .game.montauk .gauge-read > div:last-child { display: none; }
+  .game.montauk .fishbox { bottom: calc(14px + var(--sab)); width: min(400px, calc(100% - 380px)); }
+}
+@media (max-height: 500px) {
+  .game.montauk .chart { display: none; }
+  .game.montauk .dial { width: 70px; height: 70px; }
+  .game.montauk .gauge { gap: 8px; }
+  .game.montauk .gauge-read { min-width: 64px; }
+  .game.montauk .sea-label { font-size: 12px; padding: 2px 8px; }
+  .game.montauk .water { width: 190px; }
+  .game.montauk .water .bar { height: 9px; }
+  .game.montauk .flow { font-size: 10.5px; }
+  .game.montauk .catch { gap: 10px; }
+  .game.montauk .line-state { font-size: 13px; }
+  .game.montauk .mood { font-size: 15px; }
+  .game.montauk .fishbox { gap: 4px; }
+  .game.montauk .tension { height: 12px; }
+  .game.montauk .tiers span { padding: 5px 3px; font-size: 11px; }
+  .game.montauk .tiers span b { font-size: 13px; }
+  .game.montauk .tier-blurb { min-height: 0; }
+}
+@media (max-width: 560px) {
+  .game.montauk .chart { display: none; }
+  .game.montauk .dial { width: 72px; height: 72px; }
+  .game.montauk .gauge { gap: 8px; }
+  .game.montauk .gauge-read { min-width: 60px; }
+  .game.montauk .catch { gap: 10px; }
+  .game.montauk .sea-label { font-size: 12px; padding: 2px 8px; max-width: 170px; }
+  .game.montauk .water { width: 170px; }
+  .game.montauk .flow { font-size: 10.5px; flex-direction: column; gap: 0; }
+  .game.montauk .tiers { grid-template-columns: repeat(2, 1fr); }
+  .game.montauk .fishbox, .game.montauk .fishbox[hidden] { width: calc(100% - 24px); }
+}
+@media (pointer: coarse) and (max-width: 560px) {
+  .game.montauk .fishbox { width: calc(100% - 24px); bottom: calc(196px + var(--sab)); }
+}

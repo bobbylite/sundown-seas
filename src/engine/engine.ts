@@ -1,4 +1,4 @@
-// Shared ocean renderer for Sunset Skipper and Montauk.
+// Shared ocean renderer for Sunset Skipper and Montauk Rips.
 // GPU FFT ocean (3 cascades), interactive ripple sim, GPU height probes, sky, planar reflection,
 // refraction with absorption + caustics, toon helpers, particles, wind trails and post-processing.
 import * as THREE from 'three';
@@ -6,60 +6,80 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { TAU, clamp, wrap, smooth, rand, mulberry32, lgamma, isTouchDevice } from './math';
 
-export { THREE };
+export type RGB = [number, number, number];
 
-// ---------------------------------------------------------------- helpers
-export const TAU = Math.PI * 2;
-export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-export const lerp = (a, b, t) => a + (b - a) * t;
-export const damp = (a, b, l, dt) => lerp(a, b, 1 - Math.exp(-l * dt));
-export const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
-export const dampAngle = (a, b, l, dt) => a + wrap(b - a) * (1 - Math.exp(-l * dt));
-export const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
-export const rand = (a, b) => a + Math.random() * (b - a);
-export const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-export function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-function lgamma(x) {
-  const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
-  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lgamma(1 - x);
-  x -= 1;
-  let a = c[0];
-  const t = x + 7.5;
-  for (let i = 1; i < 9; i++) a += c[i] / (x + i);
-  return 0.5 * Math.log(TAU) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+export interface SkyPalette {
+  horizonSun: RGB; horizonAway: RGB; midSun: RGB; midAway: RGB; zenith: RGB;
+  cloudSun: RGB; cloudAway: RGB; cloudDark: RGB;
 }
-const v3 = a => `vec3(${a.map(n => n.toFixed(4)).join(', ')})`;
+export interface OceanParams {
+  windSpeed: number; fetch: number; dir: number; amp: number; chop: number;
+  swell: number; swellAngle: number; swellLength: number; foamBias: number; foamScale: number; seed: number;
+}
+export interface WaterParams { deep: RGB; deepGain: number; sss: RGB }
+export interface ShoreField {
+  /** Signed metres to the nearest shore: positive over water, negative on land. */
+  fn: (x: number, z: number) => number;
+  cx: number; cz: number; size: number; res: number;
+}
+export interface EngineOptions {
+  canvas: HTMLCanvasElement;
+  sunDir: THREE.Vector3;
+  shore: ShoreField;
+  sky?: Partial<SkyPalette>;
+  ocean?: Partial<OceanParams>;
+  water?: Partial<WaterParams>;
+  /** GLSL defining `float seaMul(vec2 p)` and `float seaFoam(vec2 p)`. */
+  seaGLSL?: string;
+  /** Distant peaks: [azimuth offset from the sun, height, radius]. */
+  skyline?: RGB[];
+  skylineColor?: RGB;
+  /** Boat footprint for the wake sim: [half beam, bow length, stern length] in metres. */
+  hull?: RGB;
+  probes?: number;
+  fog?: { color: string; density: number };
+  hemi?: [number, number];
+  sunColor?: number;
+  exposure?: number;
+  fov?: number;
+}
+export interface RenderState {
+  dt: number; rawDt?: number; time: number;
+  boatX: number; boatZ: number; heading: number; speed: number;
+  planeY: number; focusX: number; focusZ: number;
+}
+export interface ToonOptions extends THREE.MeshToonMaterialParameters { rim?: number; transl?: number }
 
-const SKY_DEFAULT = {
+const SKY_DEFAULT: SkyPalette = {
   horizonSun: [1.0, 0.6, 0.3], horizonAway: [0.86, 0.5, 0.62], midSun: [0.92, 0.5, 0.52], midAway: [0.5, 0.38, 0.66],
   zenith: [0.16, 0.18, 0.45], cloudSun: [1.0, 0.8, 0.48], cloudAway: [1.0, 0.55, 0.58], cloudDark: [0.46, 0.28, 0.48],
 };
+const OCEAN_DEFAULT: OceanParams = {
+  windSpeed: 7.5, fetch: 80000, dir: 0, amp: 1, chop: 1.1, swell: 0.45, swellAngle: 0.55, swellLength: 95,
+  foamBias: 2.62, foamScale: 1.7, seed: 20261017,
+};
+const WATER_DEFAULT: WaterParams = { deep: [0.02, 0.17, 0.33], deepGain: 1.15, sss: [0.08, 0.62, 0.56] };
+const v3 = (a: RGB): string => `vec3(${a.map(n => n.toFixed(4)).join(', ')})`;
+type TexUniform = { value: THREE.Texture | null };
+const texU = (t: THREE.Texture | null = null): TexUniform => ({ value: t });
 
-/**
- * @param {object} o
- * @param {HTMLCanvasElement} o.canvas
- * @param {THREE.Vector3} o.sunDir           direction toward the sun
- * @param {object} [o.sky]                    sRGB palette, see SKY_DEFAULT
- * @param {object} [o.ocean]                  sea state for the JONSWAP spectrum
- * @param {object} [o.water]                  { deep, deepGain, sss } sRGB colours
- * @param {object} o.shore                    { fn(x,z) signed metres to land (+ in water), cx, cz, size, res }
- * @param {string} [o.seaGLSL]                defines float seaMul(vec2) and float seaFoam(vec2)
- * @param {Array}  [o.skyline]                distant peaks [azimuth offset from sun, height, radius]
- * @param {number[]} [o.hull]                 boat footprint for the wake sim [half beam, bow, stern] (m)
- * @param {number} [o.probes]                 number of GPU height probes
- * @param {object} [o.fog]                    { color, density } exponential fog for scene meshes
- */
-export function createEngine(o) {
+export type Engine = ReturnType<typeof createEngine>;
+
+export function createEngine(o: EngineOptions) {
+  const mobile = isTouchDevice();
   const canvas = o.canvas;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.5 : 1.75));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = o.exposure ?? 0.95;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  const gl = renderer.getContext();
+  const gl = renderer.getContext() as WebGL2RenderingContext;
   const FLOAT_OK = renderer.extensions.has('EXT_color_buffer_float');
   const SIM_TYPE = FLOAT_OK ? THREE.FloatType : THREE.HalfFloatType;
+  const disposables: { dispose(): void }[] = [];
+  const track = <T extends { dispose(): void }>(d: T): T => { disposables.push(d); return d; };
 
   const scene = new THREE.Scene();
   if (o.fog) scene.fog = new THREE.FogExp2(new THREE.Color(o.fog.color), o.fog.density);
@@ -68,29 +88,35 @@ export function createEngine(o) {
   const SUN_DIR = o.sunDir.clone().normalize();
   const SUN_YAW = Math.atan2(SUN_DIR.x, SUN_DIR.z);
   const L_REFLECT = 1, L_REFRACT = 2;
-  const addLayers = (obj, ...ls) => obj.traverse(c => ls.forEach(l => c.layers.enable(l)));
+  const addLayers = (obj: THREE.Object3D, ...ls: number[]): void => obj.traverse(c => ls.forEach(l => c.layers.enable(l)));
 
   // ---------------------------------------------------------------- full-screen GPU passes
   const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  const fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+  const fsQuad = new THREE.Mesh(track(new THREE.PlaneGeometry(2, 2)));
   fsQuad.frustumCulled = false;
   const fsScene = new THREE.Scene();
   fsScene.add(fsQuad);
   const FS_VERT = 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }';
-  const passMat = (fragmentShader, uniforms) => new THREE.ShaderMaterial({ uniforms, vertexShader: FS_VERT, fragmentShader, depthTest: false, depthWrite: false });
-  const runPass = (mat, target) => { fsQuad.material = mat; renderer.setRenderTarget(target); renderer.render(fsScene, fsCam); };
-  const dataRT = (w, h, type, extra = {}) => new THREE.WebGLRenderTarget(w, h, {
-    type, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
-    depthBuffer: false, stencilBuffer: false, generateMipmaps: false, ...extra,
-  });
+  const passMat = (fragmentShader: string, uniforms: Record<string, THREE.IUniform>): THREE.ShaderMaterial =>
+    track(new THREE.ShaderMaterial({ uniforms, vertexShader: FS_VERT, fragmentShader, depthTest: false, depthWrite: false }));
+  const runPass = (mat: THREE.Material, target: THREE.WebGLRenderTarget | null): void => {
+    fsQuad.material = mat;
+    renderer.setRenderTarget(target);
+    renderer.render(fsScene, fsCam);
+  };
+  const dataRT = (w: number, h: number, type: THREE.TextureDataType, extra: THREE.RenderTargetOptions = {}): THREE.WebGLRenderTarget =>
+    track(new THREE.WebGLRenderTarget(w, h, {
+      type, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+      depthBuffer: false, stencilBuffer: false, generateMipmaps: false, ...extra,
+    }));
 
   // ---------------------------------------------------------------- configuration
-  const OC = Object.assign({ windSpeed: 7.5, fetch: 80000, dir: 0, amp: 1, chop: 1.1, swell: 0.45, swellAngle: 0.55, swellLength: 95, foamBias: 2.62, foamScale: 1.7, seed: 20261017 }, o.ocean);
-  const SKY = Object.assign({}, SKY_DEFAULT, o.sky);
-  const WATER = Object.assign({ deep: [0.02, 0.17, 0.33], deepGain: 1.15, sss: [0.08, 0.62, 0.56] }, o.water);
-  const HULL = o.hull ?? [0.9, 1.65, 1.35];
+  const OC: OceanParams = { ...OCEAN_DEFAULT, ...o.ocean };
+  const SKY: SkyPalette = { ...SKY_DEFAULT, ...o.sky };
+  const WATER: WaterParams = { ...WATER_DEFAULT, ...o.water };
+  const HULL: RGB = o.hull ?? [0.9, 1.65, 1.35];
   const FFT_N = 256, LOG_N = 8;
-  const CASCADE_L = [250, 37, 7];
+  const CASCADE_L: RGB = [250, 37, 7];
   const CUTS = [TAU / CASCADE_L[1] * 6, TAU / CASCADE_L[2] * 6];
   const SIM_N = 512, SIM_SIZE = 96, SIM_TX = SIM_SIZE / SIM_N, SIM_DT = 1 / 120, SIM_C = 4.2;
 
@@ -105,23 +131,39 @@ export function createEngine(o) {
     const t = new THREE.DataTexture(data, R, R, THREE.RedFormat, THREE.HalfFloatType);
     t.minFilter = t.magFilter = THREE.LinearFilter;
     t.needsUpdate = true;
-    return t;
+    return track(t);
   })();
+
+  const reflRT = track(new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }));
+  const opaqueRT = track(new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(1, 1) }));
+  const foamRT = track(new THREE.WebGLRenderTarget(512, 512, {
+    depthBuffer: false, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping,
+    minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: true, anisotropy: 8,
+  }));
 
   const U = {
     uTime: { value: 0 },
     uSunDir: { value: SUN_DIR },
     uCamPos: { value: new THREE.Vector3() },
     uL: { value: new THREE.Vector3(...CASCADE_L) },
-    uDisp0: { value: null }, uDisp1: { value: null }, uDisp2: { value: null },
-    uDer0: { value: null }, uDer1: { value: null }, uDer2: { value: null },
-    uSim: { value: null },
+    uDisp0: texU(), uDisp1: texU(), uDisp2: texU(),
+    uDer0: texU(), uDer1: texU(), uDer2: texU(),
+    uSim: texU(),
     uSimRect: { value: new THREE.Vector4(0, 0, SIM_SIZE, 0) },
-    uShore: { value: shoreTex },
+    uShore: texU(shoreTex),
     uShoreRect: { value: new THREE.Vector4(SH.cx, SH.cz, SH.size, 0) },
     uSeaAmp: { value: 1 },
     uFoamBias: { value: OC.foamBias },
     uFoamScale: { value: OC.foamScale },
+    uRefl: texU(reflRT.texture),
+    uOpaque: texU(opaqueRT.texture),
+    uDepth: texU(opaqueRT.depthTexture),
+    uFoamTex: texU(foamRT.texture),
+    uReflMatrix: { value: new THREE.Matrix4() },
+    uPlaneY: { value: 0 },
+    uRes: { value: new THREE.Vector2(1, 1) },
+    uNearFar: { value: new THREE.Vector2(camera.near, camera.far) },
+    uWaveDir: { value: new THREE.Vector2(Math.cos(OC.dir), Math.sin(OC.dir)) },
   };
 
   const SKY_GLSL = /* glsl */`
@@ -182,17 +224,18 @@ float simEdge(vec2 uv) {
     const h0Data = new Float32Array(N * N * 3 * 4);
     {
       const rng = mulberry32(OC.seed);
-      const gauss = () => { let u = 0; while (u === 0) u = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * rng()); };
+      const gauss = (): number => { let u = 0; while (u === 0) u = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * rng()); };
       const { windSpeed: U10, fetch: F } = OC;
       const alpha = 0.076 * Math.pow(U10 * U10 / (F * g), 0.22);
       const wp = 22 * Math.pow(g * g / (U10 * F), 1 / 3);
       const swellWp = Math.sqrt(g * TAU / OC.swellLength);
-      const jonswap = (w, a, p, gam) => {
+      const jonswap = (w: number, a: number, p: number, gam: number): number => {
         const sig = w <= p ? 0.07 : 0.09;
         const r = Math.exp(-((w - p) ** 2) / (2 * sig * sig * p * p));
         return a * g * g / w ** 5 * Math.exp(-1.25 * (p / w) ** 4) * gam ** r;
       };
-      const spread = (th, s) => Math.exp(lgamma(s + 1) - lgamma(s + 0.5)) / (2 * Math.sqrt(Math.PI)) * Math.pow(Math.abs(Math.cos(th / 2)), 2 * s);
+      const spread = (th: number, s: number): number =>
+        Math.exp(lgamma(s + 1) - lgamma(s + 0.5)) / (2 * Math.sqrt(Math.PI)) * Math.pow(Math.abs(Math.cos(th / 2)), 2 * s);
       for (let c = 0; c < 3; c++) {
         const dk = TAU / CASCADE_L[c];
         const kmin = c === 0 ? 0 : CUTS[c - 1], kmax = c === 2 ? 1e9 : CUTS[c];
@@ -218,7 +261,7 @@ float simEdge(vec2 uv) {
         }
       }
     }
-    const h0Tex = new THREE.DataTexture(h0Data, N, 3 * N, THREE.RGBAFormat, THREE.FloatType);
+    const h0Tex = track(new THREE.DataTexture(h0Data, N, 3 * N, THREE.RGBAFormat, THREE.FloatType));
     h0Tex.minFilter = h0Tex.magFilter = THREE.NearestFilter;
     h0Tex.needsUpdate = true;
 
@@ -276,13 +319,13 @@ float simEdge(vec2 uv) {
         float ang = 6.2831853 * fi / uSub;
         vec2 w = vec2(cos(ang), sin(ang));
         gl_FragColor = vec4(E.xy + cmul(w, O.xy), E.zw + cmul(w, O.zw));
-      }`, { uIn: { value: null }, uSub: { value: 2 }, uHoriz: { value: 1 } });
+      }`, { uIn: texU(), uSub: { value: 2 }, uHoriz: { value: 1 } });
 
-    const mergedRT = () => new THREE.WebGLRenderTarget(N, N, {
+    const mergedRT = (): THREE.WebGLRenderTarget => track(new THREE.WebGLRenderTarget(N, N, {
       type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false,
       wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping,
       minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: true, anisotropy: 8,
-    });
+    }));
     const disp = [0, 1, 2].map(() => [mergedRT(), mergedRT()]);
     const deriv = [0, 1, 2].map(() => mergedRT());
 
@@ -301,7 +344,7 @@ float simEdge(vec2 uv) {
         if (isnan(prev) || isinf(prev)) prev = J;
         float turb = uInit > 0.5 ? J : clamp(min(J, prev + uDt * 0.5 / max(J, 0.5)), -4.0, 4.0);
         gl_FragColor = vec4(uChop * A.x, A.z, uChop * A.y, turb);
-      }`, { uFFT: { value: null }, uPrev: { value: null }, uC: { value: 0 }, uChop: { value: OC.chop }, uDt: { value: 0 }, uInit: { value: 1 } });
+      }`, { uFFT: texU(), uPrev: texU(), uC: { value: 0 }, uChop: { value: OC.chop }, uDt: { value: 0 }, uInit: { value: 1 } });
     const derMat = passMat(/* glsl */`
       uniform sampler2D uFFT;
       uniform float uC, uChop;
@@ -310,10 +353,10 @@ float simEdge(vec2 uv) {
         int N = ${N};
         vec4 B = texelFetch(uFFT, ivec2(N + id.x, int(uC) * N + id.y), 0);
         gl_FragColor = vec4(B.x, B.y, uChop * B.z, uChop * B.w);
-      }`, { uFFT: { value: null }, uC: { value: 0 }, uChop: { value: OC.chop } });
+      }`, { uFFT: texU(), uC: { value: 0 }, uChop: { value: OC.chop } });
 
     let ping = 0, first = true;
-    function step(time, dt) {
+    function step(time: number, dt: number): void {
       specMat.uniforms.uT.value = time % 200;
       runPass(specMat, fa);
       for (const horiz of [1, 0]) {
@@ -347,7 +390,7 @@ float simEdge(vec2 uv) {
   // ---------------------------------------------------------------- interactive ripple sim (wake, splashes)
   const Sim = (() => {
     let a = dataRT(SIM_N, SIM_N, SIM_TYPE), b = dataRT(SIM_N, SIM_N, SIM_TYPE);
-    const out = new THREE.WebGLRenderTarget(SIM_N, SIM_N, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
+    const out = track(new THREE.WebGLRenderTarget(SIM_N, SIM_N, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false }));
     const stepMat = passMat(/* glsl */`
       uniform sampler2D uPrev;
       uniform vec2 uShift;
@@ -391,7 +434,7 @@ float simEdge(vec2 uv) {
         h = clamp(h, -0.8, 0.8);
         gl_FragColor = vec4(h, c.r, clamp(foam, 0.0, 1.0), 1.0);
       }`, {
-      uPrev: { value: null }, uShift: { value: new THREE.Vector2() }, uC2: { value: (SIM_C * SIM_DT / SIM_TX) ** 2 },
+      uPrev: texU(), uShift: { value: new THREE.Vector2() }, uC2: { value: (SIM_C * SIM_DT / SIM_TX) ** 2 },
       uDamp: { value: 0.9965 }, uDt: { value: SIM_DT }, uBoat: { value: new THREE.Vector4() }, uSplash: { value: new THREE.Vector4(0, 0, 1, 0) },
       uHull: { value: new THREE.Vector3(...HULL) },
     });
@@ -405,12 +448,14 @@ float simEdge(vec2 uv) {
         float tx = ${SIM_SIZE.toFixed(1)} / float(N);
         vec2 g = vec2(H(id + ivec2(1, 0)) - H(id - ivec2(1, 0)), H(id + ivec2(0, 1)) - H(id - ivec2(0, 1))) / (2.0 * tx);
         gl_FragColor = vec4(c.r, g, c.b);
-      }`, { uState: { value: null } });
+      }`, { uState: texU() });
 
     let cx = 0, cz = 0, acc = 0, shx = 0, shz = 0;
-    const splashes = [];
-    function splash(x, z, radius, strength) { if (splashes.length < 16) splashes.push([x, z, radius, strength]); }
-    function step(dt, boatX, boatZ, heading, speed) {
+    const splashes: [number, number, number, number][] = [];
+    function splash(x: number, z: number, radius: number, strength: number): void {
+      if (splashes.length < 16) splashes.push([x, z, radius, strength]);
+    }
+    function step(dt: number, boatX: number, boatZ: number, heading: number, speed: number): void {
       const ncx = Math.round(boatX / SIM_TX) * SIM_TX, ncz = Math.round(boatZ / SIM_TX) * SIM_TX;
       shx += Math.round((ncx - cx) / SIM_TX); shz += Math.round((ncz - cz) / SIM_TX);
       cx = ncx; cz = ncz;
@@ -432,10 +477,10 @@ float simEdge(vec2 uv) {
       U.uSim.value = out.texture;
       U.uSimRect.value.set(cx, cz, SIM_SIZE, 0);
     }
-    return { step, splash, size: SIM_SIZE, center: () => [cx, cz] };
+    return { step, splash };
   })();
 
-  // ---------------------------------------------------------------- GPU height probes
+  // ---------------------------------------------------------------- GPU height probes (async readback, a frame or two late)
   const Probe = (() => {
     const COUNT = o.probes ?? 16;
     const rt = dataRT(COUNT, 1, FLOAT_OK ? THREE.FloatType : THREE.HalfFloatType);
@@ -457,8 +502,8 @@ float simEdge(vec2 uv) {
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
     gl.bufferData(gl.PIXEL_PACK_BUFFER, buf.byteLength, gl.STREAM_READ);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    let fence = null, broken = false;
-    function poll() {
+    let fence: WebGLSync | null = null, broken = false;
+    function poll(): void {
       if (!fence) return;
       if (gl.getSyncParameter(fence, gl.SYNC_STATUS) !== gl.SIGNALED) return;
       gl.deleteSync(fence);
@@ -468,7 +513,7 @@ float simEdge(vec2 uv) {
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
       for (let i = 0; i < COUNT; i++) if (Number.isFinite(buf[i * 4])) heights[i] = buf[i * 4];
     }
-    function kick() {
+    function kick(): void {
       if (fence || broken) return;
       runPass(mat, rt);
       try {
@@ -477,16 +522,19 @@ float simEdge(vec2 uv) {
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
         fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
         gl.flush();
-      } catch (e) { broken = true; gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); }
+      } catch {
+        broken = true;
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      }
     }
-    return { pts, heights, poll, kick, count: COUNT };
+    function release(): void {
+      if (fence) gl.deleteSync(fence);
+      gl.deleteBuffer(pbo);
+    }
+    return { pts, heights, poll, kick, release, count: COUNT };
   })();
 
   // ---------------------------------------------------------------- procedural foam texture (tileable bubble lace)
-  const foamRT = new THREE.WebGLRenderTarget(512, 512, {
-    depthBuffer: false, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping,
-    minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: true, anisotropy: 8,
-  });
   runPass(passMat(/* glsl */`
     vec2 h2(vec2 p) { p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
     vec2 vor(vec2 x, float P) {
@@ -544,7 +592,7 @@ float simEdge(vec2 uv) {
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
-    })
+    }),
   );
   sky.renderOrder = -2;
   sky.frustumCulled = false;
@@ -571,14 +619,14 @@ float simEdge(vec2 uv) {
         }`,
     });
     for (const [off, h, r] of o.skyline) {
-      const g = new THREE.ConeGeometry(r, h, 9, 3);
-      const p = g.attributes.position;
+      const geo = new THREE.ConeGeometry(r, h, 9, 3);
+      const p = geo.attributes.position;
       for (let i = 0; i < p.count; i++) {
         const y = p.getY(i);
         if (y < h / 2 - 1) { p.setX(i, p.getX(i) * rand(0.8, 1.2)); p.setZ(i, p.getZ(i) * rand(0.8, 1.2)); p.setY(i, y + rand(-0.12, 0.12) * h); }
       }
-      g.computeVertexNormals();
-      const m = new THREE.Mesh(g, mat);
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, mat);
       const az = SUN_YAW + off, R = 2300;
       m.position.set(Math.sin(az) * R, h / 2 - 12, Math.cos(az) * R);
       m.scale.set(1.6, 1, 1);
@@ -590,7 +638,7 @@ float simEdge(vec2 uv) {
   scene.add(skyline);
 
   // ---------------------------------------------------------------- water surface
-  function makeWaterGeo(N = 384, R = 3000) {
+  function makeWaterGeo(N: number, R = 3000): THREE.BufferGeometry {
     const coords = new Float32Array(N + 1), spacing = new Float32Array(N + 1);
     for (let i = 0; i <= N; i++) {
       const u = i / N * 2 - 1, au = Math.abs(u);
@@ -609,26 +657,12 @@ float simEdge(vec2 uv) {
       const a = j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1;
       idx[q++] = a; idx[q++] = c; idx[q++] = b; idx[q++] = b; idx[q++] = c; idx[q++] = d;
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('aSpacing', new THREE.BufferAttribute(sp, 1));
-    g.setIndex(new THREE.BufferAttribute(idx, 1));
-    return g;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('aSpacing', new THREE.BufferAttribute(sp, 1));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    return geo;
   }
-
-  const reflRT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
-  const opaqueRT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(1, 1) });
-  Object.assign(U, {
-    uRefl: { value: reflRT.texture },
-    uOpaque: { value: opaqueRT.texture },
-    uDepth: { value: opaqueRT.depthTexture },
-    uFoamTex: { value: foamRT.texture },
-    uReflMatrix: { value: new THREE.Matrix4() },
-    uPlaneY: { value: 0 },
-    uRes: { value: new THREE.Vector2(1, 1) },
-    uNearFar: { value: new THREE.Vector2(camera.near, camera.far) },
-    uWaveDir: { value: new THREE.Vector2(Math.cos(OC.dir), Math.sin(OC.dir)) },
-  });
 
   const waterMat = new THREE.ShaderMaterial({
     uniforms: U,
@@ -784,7 +818,7 @@ float simEdge(vec2 uv) {
         #include <colorspace_fragment>
       }`,
   });
-  const waterMesh = new THREE.Mesh(makeWaterGeo(), waterMat);
+  const waterMesh = new THREE.Mesh(makeWaterGeo(mobile ? 288 : 384), waterMat);
   waterMesh.frustumCulled = false;
   scene.add(waterMesh);
 
@@ -796,12 +830,12 @@ float simEdge(vec2 uv) {
   fillLight.position.set(-SUN_DIR.x * 0.3, 0.8, -SUN_DIR.z);
   for (const l of [hemi, sunLight, fillLight]) { l.layers.enableAll(); scene.add(l); }
 
-  const gradTex = new THREE.DataTexture(new Uint8Array([80, 155, 220, 255]), 4, 1, THREE.RedFormat);
+  const gradTex = track(new THREE.DataTexture(new Uint8Array([80, 155, 220, 255]), 4, 1, THREE.RedFormat));
   gradTex.minFilter = gradTex.magFilter = THREE.NearestFilter;
   gradTex.needsUpdate = true;
 
   const sunView = new THREE.Vector3();
-  function toon(color, { rim = 0.55, transl = 0, ...rest } = {}) {
+  function toon(color: THREE.ColorRepresentation, { rim = 0.55, transl = 0, ...rest }: ToonOptions = {}): THREE.MeshToonMaterial {
     const m = new THREE.MeshToonMaterial({ color, gradientMap: gradTex, ...rest });
     m.onBeforeCompile = sh => {
       sh.uniforms.uSunView = { value: sunView };
@@ -818,24 +852,28 @@ float simEdge(vec2 uv) {
     m.customProgramCacheKey = () => `toon-${rim}-${transl}-${!!rest.vertexColors}`;
     return m;
   }
-  const outlineMats = new Map();
-  function addOutline(mesh, th = 0.03) {
+  const outlineMats = new Map<string, THREE.ShaderMaterial>();
+  function addOutline(mesh: THREE.Mesh, th = 0.03): THREE.Mesh {
     const key = th.toFixed(4);
-    if (!outlineMats.has(key)) outlineMats.set(key, new THREE.ShaderMaterial({
-      uniforms: { uT: { value: th } },
-      side: THREE.BackSide,
-      vertexShader: `uniform float uT; void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * uT, 1.0); }`,
-      fragmentShader: `void main() { gl_FragColor = vec4(0.08, 0.035, 0.11, 1.0); }`,
-    }));
-    const ol = new THREE.Mesh(mesh.geometry, outlineMats.get(key));
+    let mat = outlineMats.get(key);
+    if (!mat) {
+      mat = new THREE.ShaderMaterial({
+        uniforms: { uT: { value: th } },
+        side: THREE.BackSide,
+        vertexShader: 'uniform float uT; void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * uT, 1.0); }',
+        fragmentShader: 'void main() { gl_FragColor = vec4(0.08, 0.035, 0.11, 1.0); }',
+      });
+      outlineMats.set(key, mat);
+    }
+    const ol = new THREE.Mesh(mesh.geometry, mat);
     ol.raycast = () => {};
     mesh.add(ol);
     return ol;
   }
-  function canvasTex(w, h, draw) {
+  function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D, w: number, h: number) => void): THREE.CanvasTexture {
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
-    draw(c.getContext('2d'), w, h);
+    draw(c.getContext('2d')!, w, h);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4;
@@ -852,7 +890,7 @@ float simEdge(vec2 uv) {
   wlGeo.setAttribute('aT', new THREE.BufferAttribute(wlT, 1));
   wlGeo.setAttribute('aA', new THREE.BufferAttribute(wlA, 1).setUsage(THREE.DynamicDrawUsage));
   {
-    const idx = [];
+    const idx: number[] = [];
     for (let l = 0; l < WL_MAX; l++) for (let k = 0; k < WL_SEG - 1; k++) {
       const a = (l * WL_SEG + k) * 2;
       idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
@@ -872,10 +910,14 @@ float simEdge(vec2 uv) {
   }));
   windLinesMesh.frustumCulled = false;
   scene.add(windLinesMesh);
-  const wlines = Array.from({ length: WL_MAX }, () => ({ alive: false }));
+  interface WindLine {
+    alive: boolean; age: number; life: number; ox: number; oy: number; oz: number; dx: number; dz: number;
+    v: number; loop: boolean; t0: number; T: number; R: number; amp: number; ph: number; wid: number;
+  }
+  const wlines: WindLine[] = Array.from({ length: WL_MAX }, () => ({ alive: false, age: 0, life: 0, ox: 0, oy: 0, oz: 0, dx: 0, dz: 0, v: 0, loop: false, t0: 0, T: 1, R: 0, amp: 0, ph: 0, wid: 0 }));
   const _tan = new THREE.Vector3(), _side = new THREE.Vector3(), _toCam = new THREE.Vector3();
   const wlPts = Array.from({ length: WL_SEG }, () => new THREE.Vector3());
-  function spawnWindLine(ox, oy, oz, dx, dz, burst = false) {
+  function spawnWindLine(ox: number, oy: number, oz: number, dx: number, dz: number, burst = false): void {
     const L = wlines.find(l => !l.alive);
     if (!L) return;
     Object.assign(L, {
@@ -884,7 +926,7 @@ float simEdge(vec2 uv) {
       R: rand(1.5, 2.1), amp: rand(0.3, 0.8), ph: rand(0, TAU), wid: rand(0.07, 0.11),
     });
   }
-  function wlPoint(L, tau, out) {
+  function wlPoint(L: WindLine, tau: number, out: THREE.Vector3): THREE.Vector3 {
     let fwd = L.v * tau, up = 0;
     if (L.loop && tau > L.t0 && tau < L.t0 + L.T) {
       const s = (tau - L.t0) / L.T, om = TAU * s, e = Math.pow(Math.sin(Math.PI * s), 0.5);
@@ -892,10 +934,9 @@ float simEdge(vec2 uv) {
       up = e * L.R * (1 - Math.cos(om)) * 0.55;
     }
     const side = L.amp * Math.sin(tau * 1.7 + L.ph);
-    out.set(L.ox + L.dx * fwd + L.dz * side, L.oy + up + 0.25 * Math.sin(tau * 2.3 + L.ph), L.oz + L.dz * fwd - L.dx * side);
-    return out;
+    return out.set(L.ox + L.dx * fwd + L.dz * side, L.oy + up + 0.25 * Math.sin(tau * 2.3 + L.ph), L.oz + L.dz * fwd - L.dx * side);
   }
-  function updateWindLines(dt) {
+  function updateWindLines(dt: number): void {
     for (let l = 0; l < WL_MAX; l++) {
       const L = wlines[l];
       const base = l * WL_SEG * 2;
@@ -923,7 +964,7 @@ float simEdge(vec2 uv) {
   }
 
   // ---------------------------------------------------------------- particles (spray, splashes, sparkles)
-  const P_MAX = 900;
+  const P_MAX = mobile ? 600 : 900;
   const pGeo = new THREE.BufferGeometry();
   const pPos = new Float32Array(P_MAX * 3), pCol = new Float32Array(P_MAX * 3), pSize = new Float32Array(P_MAX), pAlpha = new Float32Array(P_MAX);
   const pVel = new Float32Array(P_MAX * 3), pLife = new Float32Array(P_MAX), pMax = new Float32Array(P_MAX), pGrav = new Float32Array(P_MAX);
@@ -944,14 +985,14 @@ float simEdge(vec2 uv) {
   particles.frustumCulled = false;
   scene.add(particles);
   let pNext = 0;
-  function emit(x, y, z, vx, vy, vz, life, size, r, g, b, grav = 9.8) {
+  function emit(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, r: number, g: number, b: number, grav = 9.8): void {
     const i = pNext; pNext = (pNext + 1) % P_MAX;
     pPos[i * 3] = x; pPos[i * 3 + 1] = y; pPos[i * 3 + 2] = z;
     pVel[i * 3] = vx; pVel[i * 3 + 1] = vy; pVel[i * 3 + 2] = vz;
     pCol[i * 3] = r; pCol[i * 3 + 1] = g; pCol[i * 3 + 2] = b;
     pLife[i] = life; pMax[i] = life; pSize[i] = size; pGrav[i] = grav;
   }
-  function updateParticles(dt) {
+  function updateParticles(dt: number): void {
     for (let i = 0; i < P_MAX; i++) {
       if (pLife[i] <= 0) { pAlpha[i] = 0; continue; }
       pLife[i] -= dt;
@@ -969,7 +1010,7 @@ float simEdge(vec2 uv) {
   const _rPos = new THREE.Vector3(), _rView = new THREE.Vector3(), _rLook = new THREE.Vector3(), _rTarget = new THREE.Vector3();
   const _rRot = new THREE.Matrix4(), _rPlane = new THREE.Plane(), _rClip = new THREE.Vector4(), _rQ = new THREE.Vector4();
   const UP = new THREE.Vector3(0, 1, 0);
-  function renderReflection(planeY) {
+  function renderReflection(planeY: number): void {
     _rPos.set(camera.position.x, planeY, camera.position.z);
     _rView.subVectors(_rPos, camera.position);
     if (_rView.dot(UP) > 0) return;
@@ -996,7 +1037,7 @@ float simEdge(vec2 uv) {
     renderer.clear();
     renderer.render(scene, reflCam);
   }
-  function renderRefractionSource() {
+  function renderRefractionSource(): void {
     camera.layers.set(L_REFRACT);
     renderer.setRenderTarget(opaqueRT);
     renderer.setClearColor(0x000000, 0);
@@ -1006,15 +1047,15 @@ float simEdge(vec2 uv) {
   }
 
   // ---------------------------------------------------------------- post processing
-  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: mobile ? 0 : 4 }));
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.36, 0.5, 1.0);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
   const _dbs = new THREE.Vector2();
-  const updatePointScale = () => { pMat.uniforms.uScale.value = U.uRes.value.y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))); };
-  function resize() {
+  const updatePointScale = (): void => { pMat.uniforms.uScale.value = U.uRes.value.y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))); };
+  function resize(): void {
     const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight;
     renderer.setSize(w, h, false);
     composer.setPixelRatio(renderer.getPixelRatio());
@@ -1028,9 +1069,10 @@ float simEdge(vec2 uv) {
     camera.updateProjectionMatrix();
     updatePointScale();
   }
-  addEventListener('resize', resize);
+  const resizeObs = new ResizeObserver(() => resize());
+  resizeObs.observe(canvas);
   resize();
-  function setFov(fov) {
+  function setFov(fov: number): void {
     if (Math.abs(camera.fov - fov) < 0.01) return;
     camera.fov = fov;
     camera.updateProjectionMatrix();
@@ -1039,7 +1081,7 @@ float simEdge(vec2 uv) {
 
   // Drop render resolution a step at a time if the GPU can't hold ~48 fps.
   let perfAcc = 0, perfFrames = 0, pixelRatio = renderer.getPixelRatio();
-  function watchPerf(raw) {
+  function watchPerf(raw: number): void {
     if (raw > 0.25) return;
     perfAcc += raw; perfFrames++;
     if (perfAcc < 2.5) return;
@@ -1053,7 +1095,7 @@ float simEdge(vec2 uv) {
   }
 
   /** Call once per frame after the game has placed its camera. */
-  function render(st) {
+  function render(st: RenderState): void {
     if (st.rawDt !== undefined) watchPerf(st.rawDt);
     U.uTime.value = st.time;
     camera.updateMatrixWorld();
@@ -1076,9 +1118,32 @@ float simEdge(vec2 uv) {
     composer.render();
   }
 
+  /** Free every GPU resource and the WebGL context itself. */
+  function dispose(): void {
+    resizeObs.disconnect();
+    Probe.release();
+    const mats = new Set<THREE.Material>();
+    scene.traverse(obj => {
+      const m = obj as THREE.Mesh;
+      if (m.geometry) m.geometry.dispose();
+      const list = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
+      list.forEach(x => mats.add(x));
+    });
+    for (const m of mats) {
+      for (const v of Object.values(m)) if (v instanceof THREE.Texture) v.dispose();
+      m.dispose();
+    }
+    outlineMats.forEach(m => m.dispose());
+    disposables.forEach(d => d.dispose());
+    bloom.dispose();
+    composer.dispose();
+    renderer.dispose();
+    renderer.forceContextLoss();
+  }
+
   return {
-    renderer, scene, camera, U, SUN_DIR, SUN_YAW, sunView, L_REFLECT, L_REFRACT,
-    toon, addOutline, canvasTex, addLayers, emit, spawnWindLine, Probe, Sim, render, setFov, resize,
+    renderer, scene, camera, U, SUN_DIR, SUN_YAW, sunView, L_REFLECT, L_REFRACT, mobile,
+    toon, addOutline, canvasTex, addLayers, emit, spawnWindLine, Probe, Sim, render, setFov, resize, dispose,
     waveDir: new THREE.Vector2(Math.cos(OC.dir), Math.sin(OC.dir)),
   };
 }

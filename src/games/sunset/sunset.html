@@ -1,0 +1,89 @@
+<canvas class="scene" aria-label="A little sailboat on a sunset sea"></canvas>
+
+<div class="hud tl">
+  <div class="brand">Sunset Skipper</div>
+  <div class="panel stars-row">
+    <svg class="star-ico" viewBox="-12 -12 24 24" aria-hidden="true"><path d="M0,-11 L3.2,-3.6 11,-3.4 4.9,1.6 7,9.4 0,5 -7,9.4 -4.9,1.6 -11,-3.4 -3.2,-3.6Z"/></svg>
+    <div>
+      <div class="label">Sun stars</div>
+      <div class="value" id="stars">0</div>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="pill" id="menuBtn" type="button">&#8249; Games</button>
+    <button class="pill" id="sound" type="button" aria-pressed="false">Sound: off</button>
+  </div>
+</div>
+
+<div class="hud tr">
+  <div class="panel gauge">
+    <div class="gauge-read">
+      <div>
+        <div class="label">Speed</div>
+        <div class="value"><span id="speed">0.0</span><small>kn</small></div>
+      </div>
+      <div class="pos" id="pos">Beam reach</div>
+    </div>
+    <svg class="compass" viewBox="-50 -50 100 100" aria-hidden="true">
+      <circle r="46" class="c-ring"/>
+      <path id="nogo" class="c-nogo" d=""/>
+      <line class="c-tick" x1="0" y1="-46" x2="0" y2="-40"/>
+      <line class="c-tick" x1="46" y1="0" x2="40" y2="0"/>
+      <line class="c-tick" x1="0" y1="46" x2="0" y2="40"/>
+      <line class="c-tick" x1="-46" y1="0" x2="-40" y2="0"/>
+      <g id="windArrow"><path class="c-wind" d="M0,-36 L10,-20 L3.5,-20 L3.5,32 L-3.5,32 L-3.5,-20 L-10,-20Z"/></g>
+      <path class="c-boat" d="M0,-15 C6,-9 7,4 5,13 L-5,13 C-7,4 -6,-9 0,-15Z"/>
+      <g id="starMark"><circle cx="0" cy="-41" r="5" class="c-star"/></g>
+    </svg>
+  </div>
+  <div class="panel sailbar desk-only">
+    <div class="label">Sail <span id="sailPct">100%</span></div>
+    <div class="bar"><i id="sailFill"></i></div>
+  </div>
+</div>
+
+<div class="hud toast" id="toast"></div>
+
+<div class="hud hint panel">
+  <span><kbd>A</kbd><kbd>D</kbd>steer</span>
+  <span><kbd>W</kbd><kbd>S</kbd>raise / lower sail</span>
+  <span><kbd>Space</kbd>hop</span>
+  <span><kbd>E</kbd>call the wind</span>
+  <span>scroll to zoom</span>
+</div>
+
+<div class="touch">
+  <div class="tgroup">
+    <button class="tbtn" data-k="left" type="button" aria-label="Steer to port"><svg viewBox="0 0 24 24"><path d="M15 4 7 12l8 8z"/></svg></button>
+    <button class="tbtn" data-k="right" type="button" aria-label="Steer to starboard"><svg viewBox="0 0 24 24"><path d="m9 4 8 8-8 8z"/></svg></button>
+  </div>
+  <div class="tgroup">
+    <div class="tcol">
+      <button class="tbtn sm" data-k="wind" type="button" aria-label="Call the wind">Wind</button>
+      <button class="tbtn lg" data-k="hop" type="button" aria-label="Hop">Hop</button>
+    </div>
+    <div class="lever" id="sailLever" role="slider" tabindex="0" aria-label="Sail" aria-valuemin="0" aria-valuemax="100">
+      <div class="lever-track"><i class="lever-fill"></i><span class="lever-knob"></span></div>
+      <span class="lever-label">Sail</span>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="intro">
+  <div class="card">
+    <h1>Sunset Skipper</h1>
+    <p>The sun is going down and the wind is up. Trim your little sail, chase the golden sun stars bobbing on the swell, and keep the horizon on your bow.</p>
+    <dl class="keys desk-only">
+      <dt><kbd>A</kbd><kbd>D</kbd></dt><dd>Steer port and starboard</dd>
+      <dt><kbd>W</kbd><kbd>S</kbd></dt><dd>Raise or lower the sail</dd>
+      <dt><kbd>Space</kbd></dt><dd>Hop over a wave</dd>
+      <dt><kbd>E</kbd></dt><dd>Call the wind to your stern</dd>
+    </dl>
+    <p class="touch-only">Hold the arrows to steer. Slide the sail lever to trim, tap Hop to jump a wave and Wind to bring the breeze to your stern.</p>
+    <p class="label note">Sailing dead into the wind leaves you in irons</p>
+    <button class="btn" id="go" type="button">Set sail</button>
+    <button class="link" id="introMenu" type="button">Back to the games</button>
+  </div>
+</div>
+
+<div class="boot" id="boot">Raising the sail…</div>
